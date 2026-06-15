@@ -59,3 +59,58 @@ Ambiente: gym-pybullet-drones (Reinforcement Learning).
   di compatibilità con librerie scientifiche.
 - Python di sistema (3.9) lasciato intatto. Ambiente di lavoro: sempre `conda activate drone-rl`.
 - Stato: ambiente pronto. Prossimo passo: installazione di gym-pybullet-drones.
+
+## 15-06-2026 — Correzione versione Python + strategia implementativa
+
+- CORREZIONE: ambiente ricreato con Python 3.10.20 (era 3.11).
+  Motivo: la documentazione ufficiale di gym-pybullet-drones (utiasDSL) raccomanda Python 3.10.
+  Allinearsi alla versione ufficiale riduce il rischio di incompatibilità.
+
+- STRATEGIA (da mail del prof, 15-06-2026): il progetto NON richiede di re-implementare
+  gli algoritmi RL da zero. Approccio di qualità = comprendere, estendere e modificare
+  implementazioni esistenti rispetto alle 3 domande di ricerca.
+- Repository di riferimento per i controllori RL: safe-control-gym (learnsyslab),
+  che include già PPO (on-policy) e DDPG (off-policy) — direttamente utili alla Domanda 1.
+- Divisione del lavoro:
+  * gym-pybullet-drones = l'ambiente/simulatore. Si usa, non si studia a fondo (tranne
+    modifiche mirate, es. vento per Domanda 3).
+  * safe-control-gym = il codice dei controllori RL. QUESTO va studiato, capito e modificato.
+- Prossimo: verificare il funzionamento dell'ambiente con script di esempio (richiesta del prof).
+- Nota: sfruttare le sessioni di mentoring (giovedì 09-11) per i punti critici, come suggerito dal prof.
+
+## 15-06-2026 — Installazione ambiente e prova di funzionamento (RICHIESTA PROF)
+
+### Installazione gym-pybullet-drones
+- Clonato repo ufficiale utiasDSL/gym-pybullet-drones in ~/tools/ (FUORI dal repo di progetto,
+  per tenere il repo pulito: è dipendenza di terzi, gestita via requirements, non codice nostro).
+- Versione installata: gym-pybullet-drones 2.1.0.
+
+### Problema incontrato e risoluzione (rilevante per l'esame)
+- `pip install -e .` falliva: pybullet non compilava (errore clang exit code 1).
+- Causa: clang di sistema molto recente (Apple clang 21.0.0, macOS darwin25) troppo severo
+  per il codice C++ datato di pybullet.
+- Soluzione: installato pybullet PRE-COMPILATO via conda (`conda install -c conda-forge pybullet`),
+  evitando la compilazione locale. Poi installato gym-pybullet-drones con `--no-deps` e le restanti
+  dipendenze a mano via pip, saltando pybullet.
+- Warning residuo: pybullet 3.2.5 (conda) vs 3.2.7 richiesto. Verificato sul campo che è innocuo:
+  gli script di esempio funzionano correttamente.
+
+### Dipendenze principali installate
+- pybullet 3.2.5 (conda), numpy 2.2, gymnasium 1.2.3, stable-baselines3 2.8.0, torch 2.12.0,
+  scipy, matplotlib, control, transforms3d, pytest.
+
+### Prova di funzionamento (test richiesto dal prof)
+- Eseguito `examples/pid.py`: finestra 3D aperta correttamente, droni in volo controllati da PID,
+  grafici finali generati. Log di posizione/assetto/velocità regolari.
+- ESITO: ambiente RL pienamente funzionante. Pronti per la proposta di progetto.
+
+## 15-06-2026 — Seconda prova: esempio RL (learn.py)
+
+- Eseguito `examples/learn.py`: addestramento RL completato senza errori.
+- L'esempio usa PPO (on-policy). Osservata curva Episode Reward: converge verso ~470 ma con
+  forti instabilità intermedie (crolli a ~150 e recuperi). Coerente con l'ipotesi della Domanda 1
+  (on-policy = convergenza meno stabile). NB: singolo run, non significativo statisticamente.
+- Comportamento del drone addestrato: hover a z≈1.0 raggiunto e mantenuto (x,y≈0).
+- Osservati gli RPM dei 4 motori oscillanti → rilevante per la Domanda 2 (fluidità / reward shaping).
+- ESITO: ambiente RL pienamente operativo, inclusa la pipeline di training e visualizzazione.
+- Salvati screenshot dei due grafici in assets/ per riferimento futuro (curva reward + stati drone).
