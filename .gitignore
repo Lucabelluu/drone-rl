@@ -24,3 +24,6 @@ __pycache__/
 # Cartelle di output pesanti (decommentare se necessario)
 # experiments/
 # data/
+
+# Installer e script di setup scaricati
+*.sh

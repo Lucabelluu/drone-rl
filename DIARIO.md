@@ -47,3 +47,15 @@ Ambiente: gym-pybullet-drones (Reinforcement Learning).
 - Primo push effettuato: `git push -u origin main`. Branch main locale agganciato a origin/main.
 - Autenticazione GitHub via Personal Access Token (classic, scope "repo"), memorizzato nel Portachiavi macOS. Token NON versionato.
 - Stato: progetto versionato in locale e sincronizzato su GitHub. Pronto per il setup dell'ambiente Python.
+
+## 15-06-2026 — Ambiente Python isolato creato
+
+- Installato Miniforge3 (conda/mamba) per Apple Silicon (arm64) in ~/miniforge3.
+  Motivo: su Mac M-series conda gestisce meglio le librerie scientifiche con componenti
+  native (es. PyBullet), riducendo errori di compilazione rispetto a venv+pip puro.
+- Creato ambiente conda dedicato "drone-rl" con Python 3.11.15.
+  Motivo della versione: 3.11 è il punto di equilibrio tra supporto e stabilità per lo
+  stack RL (gym-pybullet-drones, stable-baselines3); le 3.12/3.13 possono dare problemi
+  di compatibilità con librerie scientifiche.
+- Python di sistema (3.9) lasciato intatto. Ambiente di lavoro: sempre `conda activate drone-rl`.
+- Stato: ambiente pronto. Prossimo passo: installazione di gym-pybullet-drones.
