@@ -1,0 +1,26 @@
+# Ambiente virtuale / conda
+venv/
+env/
+.venv/
+*.egg-info/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# File di sistema macOS
+.DS_Store
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Modelli e dati pesanti (li gestiremo a parte)
+*.zip
+*.h5
+*.pt
+*.keras
+
+# Cartelle di output pesanti (decommentare se necessario)
+# experiments/
+# data/
