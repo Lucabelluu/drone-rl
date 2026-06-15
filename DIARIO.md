@@ -30,3 +30,20 @@ Ambiente: gym-pybullet-drones (Reinforcement Learning).
 ### Fase corrente
 - Prova semplice richiesta dal prof: verificare che l'ambiente gym-pybullet-drones funzioni.
 - Linee guida specifiche del progetto: ancora da ricevere (verranno caricate a breve).
+
+## 15-06-2026 — Versionamento git inizializzato
+
+- Inizializzato repository git locale nella cartella drone-rl (`git init`).
+- Creato `.gitignore` per escludere: ambiente virtuale, cache Python (__pycache__),
+  file di sistema macOS (.DS_Store), checkpoint notebook, file modello/dati pesanti.
+- Primo commit effettuato: "Setup iniziale: diario di progetto e gitignore".
+- Identità git configurata: Luca Bellu / l.bellu05@gmail.com.
+- Stato: repository locale attivo. GitHub remoto ancora da collegare.
+
+## 15-06-2026 — Repository collegato a GitHub
+
+- Creato repository remoto pubblico: github.com/Lucabelluu/drone-rl (vuoto, senza README/licenza per evitare conflitti).
+- Collegato il locale al remoto: `git remote add origin <url>` (remote chiamato "origin").
+- Primo push effettuato: `git push -u origin main`. Branch main locale agganciato a origin/main.
+- Autenticazione GitHub via Personal Access Token (classic, scope "repo"), memorizzato nel Portachiavi macOS. Token NON versionato.
+- Stato: progetto versionato in locale e sincronizzato su GitHub. Pronto per il setup dell'ambiente Python.
