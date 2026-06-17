@@ -114,3 +114,53 @@ Ambiente: gym-pybullet-drones (Reinforcement Learning).
 - Osservati gli RPM dei 4 motori oscillanti → rilevante per la Domanda 2 (fluidità / reward shaping).
 - ESITO: ambiente RL pienamente operativo, inclusa la pipeline di training e visualizzazione.
 - Salvati screenshot dei due grafici in assets/ per riferimento futuro (curva reward + stati drone).
+
+## 16-06-2026 — DQ1: algoritmi, ruolo di safe-control-gym, definizione di Crash Rate
+
+### Ambiente e strumenti (deciso)
+- Ambiente unico del progetto: gym-pybullet-drones, task hovering (volo stazionario a
+  z = 1.0 m). Già installato e funzionante.
+- Algoritmi presi da stable-baselines3 (SB3), già installato (v2.8.0). SB3 contiene già
+  PPO, SAC, DDPG, TD3 → nessuna nuova installazione necessaria.
+- safe-control-gym: usato SOLO come riferimento di studio per capire come sono
+  implementati gli algoritmi RL; NON è il runtime e non se ne copia il codice.
+  Motivo: è un ambiente DIVERSO (le linee guida ammettono un solo ambiente) e per
+  rispettare la regola "<15% di codice scritto da altri".
+
+### Concetti chiave (da saper spiegare all'esame)
+- policy = la strategia dell'agente: vista la situazione (posizione, assetto, velocità
+  del drone) decide l'azione (potenza ai motori). "Imparare" = migliorare la policy.
+- on-policy = impara solo dall'esperienza appena vissuta, poi la scarta (nessuna
+  memoria) → "reattivo".
+- off-policy = tiene un replay buffer (memoria delle esperienze passate) e lo ripassa
+  più volte, riusando anche esperienze vecchie → "con memoria".
+- Conseguenza pratica: l'off-policy di solito impara con MENO passi di simulazione
+  (più efficiente coi dati) → vantaggio su Mac CPU-bound.
+
+### DQ1 — algoritmi scelti (deciso)
+- on-policy: PPO (Proximal Policy Optimization). Migliora la strategia a piccoli passi
+  prudenti → stabile. È già l'algoritmo usato in learn.py.
+- off-policy: SAC (Soft Actor-Critic). Stabile, efficiente coi dati, già usato come
+  baseline off-policy sull'hovering nel paper dell'ambiente.
+- Scelto SAC al posto di DDPG (che il prof aveva citato) perché DDPG è noto per essere
+  instabile: come unico campione off-policy rischierebbe di far apparire l'off-policy
+  "meno stabile" per un suo difetto, falsando l'ipotesi della DQ1. La DQ1 dice "un
+  algoritmo off-policy" senza nominare DDPG → scelta libera e motivabile.
+- Cautela onesta: SAC differisce da PPO anche per la "morbidezza" (mantiene un po' di
+  casualità nelle azioni), quindi il confronto non isola PERFETTAMENTE la sola variabile
+  on/off-policy. Accettabile per un progetto universitario, purché dichiarato.
+
+### DQ1 — metrica 1: Crash Rate (deciso)
+- Un episodio = un tentativo di volo. Finisce con due "bandierine" Gymnasium:
+  terminated (fine legata al compito) oppure truncated (episodio tagliato).
+- "truncated" mescola due casi diversi: (a) drone fuori controllo = troppo lontano dal
+  target o inclinato oltre l'angolo di sicurezza → SCHIANTO; (b) tempo scaduto mentre
+  volava ancora bene → NON schianto.
+- Definizione: Crash Rate = (episodi finiti in schianto) / (episodi di valutazione
+  totali), in %. Misurato su N episodi (es. 50–100) con la policy addestrata.
+- NON si conta semplicemente "truncated == True": si guarda lo stato finale per capire
+  se era fuori controllo (schianto) o solo tempo scaduto.
+- I valori soglia esatti (distanza/angolo) si prenderanno dai limiti di sicurezza già
+  presenti dentro HoverAviary in fase di implementazione (così non sono arbitrari).
+- Buona pratica: registrare per ogni episodio il motivo della fine (schianto / tempo
+  scaduto / target raggiunto) per trasparenza.
