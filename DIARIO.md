@@ -208,3 +208,39 @@ Piano sperimentale:
   dipende dal supporto dei dati su più seed.
 - Nota di metodo: "stesso budget" = pari numero di passi; SAC, più efficiente coi dati, può
   avvantaggiarsi, ma è un vantaggio legittimo dell'off-policy (da dichiarare).
+
+  ### Spazio d'azione del progetto (deciso, vale per DQ1–DQ2–DQ3)
+- Scelto lo spazio d'azione `rpm`: la policy comanda i 4 motori in modo INDIPENDENTE
+  (4 valori di RPM), non `one_d_rpm` (un solo valore uguale per tutti).
+- Motivi:
+  * DQ2: la penalità è sulle "variazioni di potenza dei motori" → l'azione deve ESSERE la
+    potenza dei 4 motori.
+  * DQ3: per resistere al vento il drone deve inclinarsi, e per inclinarsi servono potenze
+    diverse sui 4 motori. Con `one_d_rpm` (tutti uguali) può solo salire/scendere e NON
+    potrebbe contrastare una raffica laterale → la DQ3 sarebbe senza risposta possibile.
+  * La stessa policy attraversa DQ1→DQ2→DQ3: lo spazio d'azione si sceglie una volta sola.
+- Costo: addestrare 4 motori indipendenti è molto più lento (ore, non minuti).
+  Mitigazione: Colab di riserva per i run pesanti; se serve, 3 seed invece di 5.
+
+### DQ2 — Reward Shaping per la fluidità (deciso)
+Formulazione (invariata, già ben posta):
+"Applicando il Reward Shaping all'algoritmo vincitore della DQ1, l'introduzione di una
+penalità quadratica per le variazioni brusche di potenza dei motori produce un volo
+stazionario significativamente più fluido, e quanto incide questo vincolo sul tempo
+necessario a raggiungere il target?"
+
+- Tecnica: alla ricompensa del compito si somma un termine -λ·||aₜ − aₜ₋₁||², cioè la
+  differenza al quadrato tra i comandi ai 4 motori in due istanti consecutivi. "Quadratica"
+  = le variazioni grandi sono punite molto più delle piccole → l'agente impara a non dare
+  strattoni ai motori. È la tecnica standard di action smoothness, semplice, e aderente alla
+  domanda. (Scartate: penalità sull'ampiezza = controlla l'energia non la fluidità;
+  jerk/CAPS = troppo complesse; L1 = meno adatta e cambierebbe "quadratica".)
+- Variabile studiata: λ (peso della penalità). Sweep su più valori incluso λ=0 (= vincitore
+  DQ1 senza shaping) per tracciare il trade-off. Valori esatti da calibrare sulla scala
+  della ricompensa.
+- Applicata a: il vincitore della DQ1 (PPO o SAC, deciso dai risultati).
+- Metriche: fluidità = media delle variazioni quadratiche dei comandi ai motori tra istanti
+  consecutivi (più bassa = più liscio); tempo al target = settling time = passi finché il
+  drone arriva e RESTA vicino al target (|z−1|<ε mantenuto per N passi).
+- Analisi: curva del trade-off fluidità vs tempo al target al crescere di λ (= il "prezzo").
+- Confronto su più seed, per poter dire "significativamente".
