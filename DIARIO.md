@@ -186,3 +186,25 @@ Ambiente: gym-pybullet-drones (Reinforcement Learning).
   attorno (fascia stretta = convergenza stabile).
 - Principio deciso: addestramento multi-seed obbligatorio per questa metrica
   (minimo 3, idealmente 5).
+
+  ### DQ1 — formulazione finale e piano sperimentale (deciso)
+Formulazione definitiva:
+"In un task di hovering (volo stazionario a quota fissa), un algoritmo off-policy basato
+sulla memorizzazione dell'esperienza passata ottiene un tasso di schianti (Crash Rate)
+inferiore e una convergenza più stabile rispetto a un algoritmo on-policy puramente reattivo?"
+(Rispetto alla prima stesura: "garantisce" → "ottiene" perché una domanda di ricerca osserva
+una tendenza, non garantisce; "hovering spaziale" → "hovering (volo stazionario a quota fissa)".
+La domanda resta generale: PPO/SAC stanno nei metodi, non nella domanda.)
+
+Piano sperimentale:
+- Metodi: confronto PPO (on-policy) vs SAC (off-policy), entrambi da stable-baselines3, stesso
+  ambiente HoverAviary, STESSO budget di addestramento (stesse interazioni con l'ambiente) per
+  un confronto equo.
+- Attività: addestrare PPO e SAC con più seed (min 3, idealmente 5), stessi passi; salvare le
+  curve di apprendimento; valutare ogni policy su N episodi (es. 50–100) registrando il motivo
+  di fine di ciascun episodio.
+- Metriche: Crash Rate (definito sopra) + stabilità di convergenza (definita sopra).
+- Ipotesi: SAC ottiene Crash Rate inferiore e convergenza più stabile di PPO; la conclusione
+  dipende dal supporto dei dati su più seed.
+- Nota di metodo: "stesso budget" = pari numero di passi; SAC, più efficiente coi dati, può
+  avvantaggiarsi, ma è un vantaggio legittimo dell'off-policy (da dichiarare).
