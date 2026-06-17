@@ -164,3 +164,25 @@ Ambiente: gym-pybullet-drones (Reinforcement Learning).
   presenti dentro HoverAviary in fase di implementazione (così non sono arbitrari).
 - Buona pratica: registrare per ogni episodio il motivo della fine (schianto / tempo
   scaduto / target raggiunto) per trasparenza.
+
+  ### DQ1 — metrica 2: convergenza stabile (deciso)
+- Curva di apprendimento = ricompensa media per episodio (asse Y) lungo il tempo di
+  addestramento (asse X). Convergenza = la curva sale e si assesta in alto.
+- Convergenza stabile = curva regolare che resta su; instabile = forti oscillazioni,
+  cali bruschi o crollo dopo un buon valore (es. già osservato con PPO: ~470 con
+  crolli a ~150 e recuperi).
+- "Stabilità" = poca variabilità, con due facce: quanto la curva traballa dentro un
+  singolo addestramento, e quanto cambia il risultato rifacendo l'addestramento con
+  casualità diversa.
+- seed = numero che fissa la casualità di un run (posizione iniziale, esplorazione,
+  inizializzazione della rete). Un solo run può essere fortuna o sfortuna: per misurare
+  la stabilità servono più run con seed diversi.
+- Definizione operativa, due numeri:
+  1. stabilità tra run = deviazione standard della prestazione finale tra i seed
+     (deviazione standard = quanto i numeri sono sparpagliati; piccola = stabile);
+  2. regolarità entro il run = deviazione standard della ricompensa nell'ultimo tratto
+     di addestramento, mediata sui seed (piccola = curva liscia, senza crolli).
+- Presentazione standard: curva media dei seed con una fascia ± una deviazione standard
+  attorno (fascia stretta = convergenza stabile).
+- Principio deciso: addestramento multi-seed obbligatorio per questa metrica
+  (minimo 3, idealmente 5).
