@@ -244,3 +244,29 @@ necessario a raggiungere il target?"
   drone arriva e RESTA vicino al target (|z−1|<ε mantenuto per N passi).
 - Analisi: curva del trade-off fluidità vs tempo al target al crescere di λ (= il "prezzo").
 - Confronto su più seed, per poter dire "significativamente".
+
+### DQ3 — Robustezza e Domain Randomization (deciso)
+Formulazione (invariata, già ben posta):
+"Il modello ottimizzato per la fluidità (vincitore DQ2) è in grado di resistere a turbolenze
+esterne stocastiche (vento) introdotte in fase di valutazione, o è necessario addestrare una
+nuova policy iniettando disturbi fisici casuali durante il training per evitare la perdita di
+assetto?"
+
+- Vento: forza esterna applicata al drone via PyBullet (applyExternalForce), in una sottoclasse
+  di HoverAviary. Modello stocastico CORRELATO nel tempo (Ornstein-Uhlenbeck): raffiche che
+  crescono e calano. Motivo: un vento costante farebbe imparare solo un offset fisso (banale e
+  irrealistico); rumore per-passo sarebbe troppo brusco. Direzione casuale nel piano orizzontale
+  (è lì che serve il controllo d'assetto), intensità espressa in % del peso del drone, calibrata
+  con uno spike (forza al limite in cui la policy non protetta inizia a fallire a volte).
+- Il vento NON è osservato dalla policy: vede solo lo stato del drone e reagisce agli effetti
+  (robustezza reattiva realistica).
+- Confronto: Policy A = vincitrice DQ2 (allenata in aria calma) testata nel vento (zero-shot)
+  vs Policy B = stesso algoritmo e stessa reward della DQ2 + vento iniettato in addestramento
+  (domain randomization). Unica differenza A vs B: vento in training.
+- Valutazione: A e B sugli STESSI episodi di vento. Test su vento in-distribution e su vento
+  più forte mai visto (out-of-distribution) per misurare la generalizzazione. Figura chiave:
+  curva di robustezza (tasso di fallimento vs intensità del vento) per A e B.
+- Metriche: Crash Rate / perdita di assetto sotto vento (riuso definizione DQ1) + deriva dal
+  target (errore di posizione RMS). Confronto su più seed.
+- Ipotesi collegata a DQ2: la fluidità (correzioni morbide) potrebbe ridurre la reattività al
+  vento; si verifica se il domain randomization riesce comunque a rendere robusta la policy.
