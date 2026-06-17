@@ -270,3 +270,70 @@ assetto?"
   target (errore di posizione RMS). Confronto su più seed.
 - Ipotesi collegata a DQ2: la fluidità (correzioni morbide) potrebbe ridurre la reattività al
   vento; si verifica se il domain randomization riesce comunque a rendere robusta la policy.
+
+  ## 17-06-2026 — Spazio d'azione, DQ2, DQ3, proposta consegnata
+
+### Spazio d'azione del progetto (vale per DQ1–DQ2–DQ3)
+- Scelto `rpm`: la policy comanda i 4 motori in modo indipendente (NON `one_d_rpm`,
+  dove tutti i motori riceverebbero lo stesso valore).
+- Motivi:
+  * DQ2: la penalità è sulle "variazioni di potenza dei motori" → l'azione DEVE essere
+    la potenza dei 4 motori.
+  * DQ3: per contrastare il vento il drone deve inclinarsi, e per inclinarsi servono
+    spinte diverse sui 4 motori. Con `one_d_rpm` la DQ3 sarebbe impossibile.
+  * La stessa policy attraversa DQ1→DQ2→DQ3, quindi lo spazio d'azione si sceglie una
+    volta sola.
+- Costo: addestramento più lento (ore, non minuti). Mitigazione: Colab per i run
+  pesanti; se necessario, 3 seed invece di 5.
+
+### DQ2 — Reward Shaping per la fluidità
+- Tecnica: alla ricompensa del compito si somma -λ·||aₜ − aₜ₋₁||², ovvero la
+  differenza quadratica tra i comandi ai motori in due istanti consecutivi.
+- "Quadratica": le variazioni grandi sono punite molto più delle piccole, quindi
+  l'agente impara a non dare strattoni ai motori (= fluidità).
+- Variabile studiata: λ (peso della penalità). Sweep su più valori incluso λ=0
+  (= vincitore DQ1 senza shaping), per tracciare il trade-off fluidità ↔ tempo al
+  target.
+- Applicata al vincitore della DQ1.
+- Metriche: fluidità = media delle variazioni quadratiche dei comandi tra istanti
+  consecutivi (più bassa = più liscio); tempo al target = settling time = numero di
+  passi finché |z−1|<ε è mantenuto per N passi.
+- Multi-seed obbligatorio per poter parlare di differenza "significativa".
+- Alternative scartate: penalità sull'ampiezza dell'azione (controlla l'energia,
+  non la fluidità); L1 (cambia il senso di "quadratica"); jerk/CAPS (troppo complesse
+  rispetto alla domanda).
+
+### DQ3 — Robustezza e Domain Randomization
+- Vento: forza esterna applicata via PyBullet (applyExternalForce) in una sottoclasse
+  di HoverAviary.
+- Modello stocastico correlato nel tempo (Ornstein-Uhlenbeck): raffiche che crescono
+  e calano. Motivi: un vento costante farebbe imparare un offset banale e irrealistico;
+  rumore per-passo sarebbe troppo brusco e poco fisico.
+- Direzione casuale nel piano orizzontale (è lì che serve il controllo d'assetto),
+  intensità espressa in % del peso del drone, calibrata con uno spike (intensità al
+  limite in cui la policy non protetta inizia a fallire qualche volta).
+- Il vento NON è osservato dalla policy: vede solo lo stato del drone e reagisce agli
+  effetti (robustezza reattiva realistica, come un drone vero).
+- Confronto:
+  * Policy A = vincitrice DQ2 (allenata in aria calma) testata nel vento (zero-shot).
+  * Policy B = stesso algoritmo e stessa reward della DQ2 + vento iniettato in
+    addestramento (domain randomization).
+  * Unica differenza A↔B: presenza di vento in training.
+- Valutazione: A e B sugli STESSI episodi di vento. Test su vento in-distribution
+  (= stessa intensità del training di B) e out-of-distribution (= più forte di
+  qualsiasi visto), per misurare la generalizzazione. Figura chiave: curva di
+  robustezza (tasso di fallimento vs intensità del vento) per A e B.
+- Metriche: Crash Rate / perdita di assetto sotto vento (riuso definizione DQ1) +
+  deriva dal target (errore RMS di posizione).
+- Ipotesi collegata a DQ2: la fluidità (correzioni morbide) potrebbe ridurre la
+  reattività al vento; si verifica se il domain randomization riesce comunque a
+  rendere robusta la policy fluida.
+
+### Proposta di progetto consegnata
+- Nome: StableHover. Settimana: S09 Deep Reinforcement Learning.
+- Ambiente: gym-pybullet-drones (repo: github.com/utiasDSL/gym-pybullet-drones),
+  task HoverAviary, azione `rpm` a 4 motori indipendenti.
+- D3 marcata come responsible DL (robustezza/sicurezza sotto disturbi).
+- Consegnata via Moodle. Mandata mail di rettifica per refuso nel link al repository
+  dell'ambiente (era learnsyslab, repo corretto utiasDSL). Versione v2 della proposta
+  in `assets/`.
