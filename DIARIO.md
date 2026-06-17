@@ -337,3 +337,54 @@ assetto?"
 - Consegnata via Moodle. Mandata mail di rettifica per refuso nel link al repository
   dell'ambiente (era learnsyslab, repo corretto utiasDSL). Versione v2 della proposta
   in `assets/`.
+
+  ## 17-06-2026 — Lettura di HoverAviary: reward, fine episodio, Crash Rate operativa
+
+Letto `gym_pybullet_drones/envs/HoverAviary.py` della v2.1.0 installata.
+Verifica di affidabilità: `cat` dal Mac IDENTICO al file raw del branch main su
+GitHub → per questo file nessun disallineamento web/installato. (I genitori
+BaseRLAviary/BaseAviary verranno comunque verificati a parte.)
+
+### Costanti dell'ambiente (lette, non decise)
+- Target di hover: TARGET_POS = [0, 0, 1] (z = 1 m). Durata episodio:
+  EPISODE_LEN_SEC = 8 s. Frequenze: fisica 240 Hz (pyb_freq), controllo 30 Hz
+  (ctrl_freq) → 8 passi di fisica per ogni decisione, 240 decisioni per episodio.
+  Il numero 240 (passi di controllo/episodio) è l'unità temporale per il settling
+  time della DQ2 e per l'asse X dei grafici.
+- Vettore di stato (indici rilevanti): state[0:3] = x,y,z; state[7] = roll;
+  state[8] = pitch; state[9] = yaw (NON usato dai controlli di fine episodio).
+
+### _computeReward (punto d'iniezione della DQ2)
+- Ricompensa per passo: max(0, 2 − ||TARGET_POS − pos||⁴). Massimo 2/passo
+  (solo sul target); la quarta potenza la fa crollare in fretta (a 1 m vale 1,
+  a ~1.19 m è già 0). Massimo teorico per episodio ≈ 240 × 2 = 480 → coerente
+  con il ~470 osservato con learn.py (conferma indiretta della versione).
+- Decisione: il termine di fluidità della DQ2 (−λ·||aₜ−aₜ₋₁||²) si sommerà QUI,
+  in una sottoclasse di HoverAviary che override-a _computeReward.
+
+### _computeTerminated (quasi sempre falso → conseguenza metodologica)
+- Restituisce True solo se distanza dal target < 0.0001 m (0.1 mm): in pratica
+  non capita mai. Conseguenza: gli episodi finiscono quasi sempre per "truncated".
+- Conferma la scelta già nel diario: la Crash Rate NON si legge da truncated==True,
+  ma dallo STATO FINALE dell'episodio.
+
+### _computeTruncated → definizione VERA di schianto (DECISA)
+- L'ambiente tronca per due famiglie di cause:
+  (a) FUORI CONTROLLO = SCHIANTO: |x|>1.5 OR |y|>1.5 OR z>2.0 OR |roll|>0.4 OR
+      |pitch|>0.4 (0.4 rad ≈ 22.9° = soglia di perdita d'assetto);
+  (b) TEMPO SCADUTO = SOPRAVVISSUTO: oltre 8 s di volo.
+- DEFINIZIONE OPERATIVA di Crash Rate (DQ1):
+  schianto = al passo finale è violata almeno una delle 5 soglie geometriche/
+  d'assetto; sopravvivenza = episodio arrivato al limite di 8 s senza violarle.
+  Crash Rate = schianti / episodi di valutazione totali (%).
+- Riuso in DQ3: le soglie |roll|>0.4 e |pitch|>0.4 sono anche l'indicatore di
+  "perdita di assetto" sotto vento. Strumento unico, definito una volta.
+
+### Limitazione nota e sua gestione (DECISA, per onestà metodologica)
+- La soglia su z è solo superiore (z>2.0): un drone che cadesse perfettamente
+  verticale verso il pavimento (z→0) potrebbe non essere troncato come schianto.
+  In pratica un drone che precipita si inclina quasi sempre → scatta roll/pitch.
+- Decisione: si ancora la Crash Rate alle 5 soglie NATIVE dell'ambiente (limiti
+  veri, non arbitrari) e in più si logga lo stato finale + il motivo di fine di
+  ogni episodio, così eventuali atterraggi a terra mascherati da timeout sono
+  rilevabili a posteriori e riportati con trasparenza. Difendibilità + tracciabilità.
