@@ -531,3 +531,40 @@ e _physics() di BaseAviary.py. Con questi si chiude la fase di studio dell'ambie
     mostrare il codice. Il notebook dev'essere eseguibile top-to-bottom in pochi secondi
     perché legge risultati salvati, non li ricalcola.
   * Mappatura: un notebook per domanda di ricerca → corrisponde 1:1 a report ed esposizione.
+
+  ## 18-06-2026 — Feedback del prof sulla proposta e revisione
+
+### Esito validazione
+- La proposta NON è stata validata nella prima forma: richieste modifiche (non
+  sostanziali, di forma e di portata). Impianto del progetto confermato.
+
+### Modifiche richieste e decisioni prese
+- Domande di ricerca riformulate come domande esplicite e SINTETICHE (una riga in
+  forma interrogativa generale), con il dettaglio operativo spostato nel testo
+  descrittivo sotto. Esempio suggerito dal prof per la D1: "Quali differenze emergono
+  tra apprendimento off-policy e on-policy?".
+- D1 inquadrata a livello di APPROCCI on-policy vs off-policy (non "PPO vs SAC" come
+  confronto a variabile singola): PPO e SAC restano i rappresentanti concreti delle
+  due famiglie. Motivo: SAC differisce da PPO anche per entropia/architettura, quindi
+  un'eventuale vittoria non è attribuibile alla sola memoria → la domanda va posta al
+  livello generale per evitare imprecisioni concettuali.
+
+### Configurazioni sperimentali fissate (prima erano lasciate generiche)
+- Numero di configurazioni dichiarato in anticipo e LIMITATO, per contenere il costo
+  computazionale su hardware senza cluster (MacBook):
+  * 3 seed per ogni configurazione (minimo per valutare la stabilità via varianza).
+  * D2: 3 valori del peso λ, incluso λ=0 come riferimento (vincitore D1 senza shaping)
+    + 2 valori non nulli per vedere la tendenza del trade-off.
+- Il prof ha chiarito che questi numeri sono il MINIMO da conseguire; estensioni
+  (più seed, più λ) sono opzionali in base al tempo disponibile.
+
+### Vento (D3) — fattibilità dichiarata
+- Confermato che gym-pybullet-drones NON ha il vento pronto: va aggiunto.
+- Intervento contenuto e dichiarato come tale: sottoclasse di HoverAviary che applica
+  una forza esterna orizzontale via PyBullet applyExternalForce, intensità variata nel
+  tempo con processo di Ornstein-Uhlenbeck. Poche righe, nessuna modifica al motore
+  fisico → rischio di sovraccarico implementativo limitato.
+
+### Prossimo passo
+- Ricaricata la proposta corretta su Moodle (descrizione con domande sintetiche +
+  dettaglio, link utiasDSL, numeri di seed/λ dichiarati). In attesa di validazione.
