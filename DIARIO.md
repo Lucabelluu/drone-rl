@@ -388,3 +388,60 @@ BaseRLAviary/BaseAviary verranno comunque verificati a parte.)
   veri, non arbitrari) e in più si logga lo stato finale + il motivo di fine di
   ogni episodio, così eventuali atterraggi a terra mascherati da timeout sono
   rilevabili a posteriori e riportati con trasparenza. Difendibilità + tracciabilità.
+
+  ## 17-06-2026 — Lettura di BaseRLAviary: azione rpm, buffer, aₜ della DQ2, osservazione
+
+Letto `gym_pybullet_drones/envs/BaseRLAviary.py` (genitore di HoverAviary) dalla
+fonte installata sul Mac. Qui sono definiti: spazio d'azione, traduzione azione→RPM,
+buffer delle azioni, spazio e contenuto dell'osservazione.
+
+### Spazio d'azione e traduzione azione → RPM (act = rpm)
+- L'agente NON emette RPM diretti. Emette 4 numeri normalizzati in [−1, +1] (uno per
+  motore); _actionSpace è un Box(low=−1, high=+1) di dimensione 4.
+- Traduzione in _preprocessAction: rpm = HOVER_RPM · (1 + 0.05 · action), dove
+  HOVER_RPM è il regime di giri che bilancia esattamente la gravità (hover a regime).
+  Quindi: action=0 → hover; action=+1 → +5% RPM; action=−1 → −5% RPM.
+- Conseguenza (autorità di controllo): l'agente modula solo il ±5% attorno all'hover.
+  Banda stretta, ottima per l'hovering (azione ben condizionata, niente strattoni
+  enormi), ma è un vincolo fisico da tenere presente per la DQ3.
+
+### DQ2 — definizione operativa di aₜ nella penalità di fluidità (DECISA)
+- Penalità DQ2: −λ·||aₜ − aₜ₋₁||². Decisione: aₜ = AZIONE NORMALIZZATA in [−1,1]⁴
+  (l'output della policy), NON gli RPM.
+- Equivalenza (motivazione): poiché rpm = HOVER_RPM·(1+0.05·a), si ha
+  rpm_t − rpm_{t−1} = (0.05·HOVER_RPM)·(aₜ − aₜ₋₁), quindi
+  ||Δrpm||² = (0.05·HOVER_RPM)²·||Δa||². Penalizzare gli RPM o l'azione normalizzata
+  è IDENTICO a meno di una costante, e quella costante viene riassorbita da λ (che
+  facciamo variare nello sweep). La scelta resta quindi fedele al testo della DQ2
+  ("variazioni di potenza dei motori").
+- Perché l'azione normalizzata e non gli RPM: (a) è ciò che la policy controlla
+  direttamente; (b) è già disponibile nel action_buffer → zero codice extra;
+  (c) essendo limitata in [−1,1], λ ha una scala interpretabile e pulita.
+
+### Meccanismo del buffer delle azioni (come si ottengono aₜ e aₜ₋₁)
+- self.action_buffer è una deque di lunghezza ctrl_freq//2 = 15 (≈ 0,5 s di storico),
+  riempita di zeri all'avvio. Ogni _preprocessAction vi appende l'azione corrente.
+- Nel futuro override di _computeReward: aₜ = action_buffer[-1], aₜ₋₁ = action_buffer[-2].
+  La differenza è quindi già pronta, senza variabili di stato aggiuntive.
+- Transitorio al primo passo: aₜ₋₁ = 0 (buffer inizializzato a zeri) → penalità iniziale
+  trascurabile.
+- Da confermare leggendo BaseAviary: l'ordine esatto delle chiamate dentro step()
+  (_preprocessAction prima di _computeReward). Il meccanismo del buffer è comunque questo.
+
+### Osservazione della policy (obs = kin) e premessa della DQ3 (CERTIFICATA dal codice)
+- _computeObs restituisce 72 dimensioni: 12 valori cinematici [posizione x,y,z; assetto
+  roll,pitch,yaw; velocità lineare vx,vy,vz; velocità angolare wx,wy,wz] + storico delle
+  ultime 15 azioni (15×4 = 60).
+- Nell'osservazione NON compare alcun termine di vento/forza/disturbo esterno: la policy
+  vede solo lo stato del proprio corpo e la propria storia di comandi.
+- Certificazione DQ3: iniettando il vento via applyExternalForce, la policy NON lo osserva
+  direttamente; ne percepisce solo gli effetti (variazioni di posizione/velocità/assetto).
+  È la "robustezza reattiva realistica" voluta dalla DQ3 (drone senza sensore di vento a
+  bordo). Vincolo implementativo conseguente: la sottoclasse del vento NON deve modificare
+  _computeObs, così il vento resta non osservato per costruzione.
+
+### Nota per la DQ3 — la calibrazione del vento è legata all'autorità ±5%
+- L'autorità limitata (±5% RPM) fissa la scala del vento "sensato": un vento troppo forte
+  sarebbe incontrastabile da qualunque policy e svuoterebbe l'esperimento. Conferma la
+  necessità (già prevista) di calibrare l'intensità con uno spike. Il confronto A-vs-B usa
+  lo STESSO vento per entrambe → è relativo, quindi il valore assoluto del vento non è il punto.
