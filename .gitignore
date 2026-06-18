@@ -26,4 +26,4 @@ __pycache__/
 # data/
 
 # Installer e script di setup scaricati
-*.sh
+.vscode/

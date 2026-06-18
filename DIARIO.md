@@ -568,3 +568,44 @@ e _physics() di BaseAviary.py. Con questi si chiude la fase di studio dell'ambie
 ### Prossimo passo
 - Ricaricata la proposta corretta su Moodle (descrizione con domande sintetiche +
   dettaglio, link utiasDSL, numeri di seed/λ dichiarati). In attesa di validazione.
+
+  ## 18-06-2026 — Problema OpenMP su macOS (OMP Error #15) e mitigazione
+
+- All'avvio di train.py (importa stable-baselines3 → torch), processo abortito con
+  "OMP Error #15: ...libomp.dylib already initialized".
+- Causa: su macOS+conda due copie del runtime OpenMP (libomp) vengono linkate — una da
+  PyTorch (wheel pip), una dallo stack NumPy/SciPy (conda) — e il runtime aborta.
+- Mitigazione: KMP_DUPLICATE_LIB_OK=TRUE impostata da DENTRO lo script, prima dell'import
+  di torch/SB3 (os.environ.setdefault in cima a train.py). Scelta in-script (non export di
+  shell) per tracciabilità: viaggia col codice, versionata e commentata.
+- Non adottato il fix "un solo OpenMP nell'env" (es. torch da conda-forge) per non
+  destabilizzare un'installazione laboriosa già funzionante (pybullet via conda).
+
+  ## 18-06-2026 — train.py: impalcatura di training DQ1 (design + implementazione)
+
+Scritto src/train.py, script ATOMICO: addestra una sola policy (un algoritmo, un seed)
+per un budget fisso di timestep e salva gli artefatti del run. Il loop sui seed sarà
+esterno (script di shell), così un run che fallisce non trascina gli altri.
+
+- Interfaccia CLI: --algo {ppo,sac}, --seed, --timesteps OBBLIGATORI (nessun default →
+  impossibile lanciare per sbaglio col budget sbagliato); --output-dir e --overwrite
+  opzionali. Il comando lanciato è esso stesso la documentazione del run.
+- Riproducibilità su più sorgenti: set_random_seed (Python/NumPy/Torch) + seed
+  all'ambiente (make_vec_env) + seed al modello SB3. Obiettivo realistico: stesso
+  (algo, seed) riproducibile sulla macchina; seed diversi → run diversi.
+- Tracciabilità: ogni run salva config.json (identità: algo, seed, budget, obs=kin,
+  act=rpm, versione SB3, hash commit git, timestamp) e hyperparams.json (iperparametri
+  effettivi: i default di SB3 possono cambiare tra versioni → vanno congelati agli atti).
+  Nomi di run deterministici {algo}_seed{N}.
+- Ambiente: HoverAviary, obs=kin, act=rpm, n_envs=1 per entrambi; eval_env separato
+  (seed diverso) per indipendenza valutazione/training.
+- Modello: PPO/SAC da SB3, MlpPolicy, IPERPARAMETRI DI DEFAULT per entrambi. Scelta di
+  controllo: tunare una sola famiglia falserebbe il confronto sull'approccio on/off-policy;
+  la sensibilità agli iperparametri è una domanda diversa, fuori scope DQ1.
+- Logging/valutazione in training: EvalCallback SENZA early stopping. Budget pieno per
+  vedere l'intera curva, instabilità comprese (= cuore della metrica 2). Produce
+  evaluations.npz (curva) e best_model.zip; eval_freq derivato dal budget per ~50 punti.
+- Problema macOS OpenMP (OMP Error #15) risolto con KMP_DUPLICATE_LIB_OK=TRUE in cima
+  allo script (vedi blocco dedicato).
+- Smoke test superato: PPO e SAC a 5000 passi addestrano, loggano e salvano tutti gli
+  artefatti. Budget reale ancora da calibrare.
