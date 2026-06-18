@@ -492,3 +492,24 @@ e _physics() di BaseAviary.py. Con questi si chiude la fase di studio dell'ambie
   osservazione, vento non osservato) e BaseAviary (ordine step(), iniezione forze). Tutte le
   premesse implementative di DQ1/DQ2/DQ3 sono verificate sul codice reale. Prossima fase:
   implementazione (codice nostro), a partire dall'impalcatura sperimentale della DQ1.
+
+  ## 18-06-2026 — Struttura del repo e principio di lavoro per la fase implementativa
+
+- Definita la struttura del codice di progetto:
+  * src/ = codice NOSTRO (envs/ per le sottoclassi degli ambienti DQ2/DQ3; gli script
+    di training, valutazione, plotting e utility andranno qui). Confine netto col codice
+    di terzi: gym-pybullet-drones resta fuori dal repo (~/tools/), così il contributo
+    proprio è isolato e ispezionabile (regola "<15% di codice altrui").
+  * experiments/ = definizioni degli esperimenti e relativi risultati (una sottocartella
+    per domanda di ricerca, a partire da dq1/).
+  * scripts/ = entrypoint comodi per lanciare gli esperimenti.
+  * assets/ = materiale non-codice, suddiviso in logo/, proposta/, prove_setup/.
+- Distinzione decisa per i risultati: artefatti pesanti (modelli) esclusi da git; artefatti
+  leggeri (metriche CSV/JSON, figure, log per-episodio) versionati, perché sono la prova
+  tracciabile dei risultati.
+- Principio di lavoro per la fase sperimentale: PRIMA l'impalcatura completa (training
+  riproducibile + valutazione + Crash Rate + plot + salvataggio), POI la si convalida con
+  uno smoke test minimo (1 seed, pochi passi: serve solo a verificare che la pipeline giri
+  end-to-end e scriva i file giusti), e SOLO DOPO i training veri multi-seed. Motivo: la
+  simulazione è CPU-bound, i run veri costano ore; convalidare la pipeline a costo quasi
+  nullo evita di scoprire bug dopo ore di addestramento sprecate.
