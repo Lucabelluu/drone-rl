@@ -513,3 +513,21 @@ e _physics() di BaseAviary.py. Con questi si chiude la fase di studio dell'ambie
   end-to-end e scriva i file giusti), e SOLO DOPO i training veri multi-seed. Motivo: la
   simulazione è CPU-bound, i run veri costano ore; convalidare la pipeline a costo quasi
   nullo evita di scoprire bug dopo ore di addestramento sprecate.
+
+  ## 18-06-2026 — Architettura del codice: esecuzione vs narrazione
+
+- Separazione netta dei ruoli:
+  * src/ = codice ESEGUIBILE (script .py): training, valutazione, sottoclassi degli
+    ambienti, utility. È la "macchina" che produce gli artefatti.
+  * notebooks/ = NARRAZIONE e ANALISI: un notebook per domanda di ricerca (dq1/dq2/dq3).
+    Carica gli artefatti già prodotti da experiments/.../results/ e fa grafici, tabelle,
+    calcolo metriche e conclusioni. NON addestra.
+- Motivazioni:
+  * Riproducibilità: i notebook hanno stato nascosto ed esecuzione fuori ordine, inadatti
+    a un progetto sperimentale; i training durano ore e non possono vivere in un kernel
+    Jupyter. Il training va negli script, lanciabile da terminale e riproducibile via seed
+    fissi + comando documentato.
+  * Spiegabilità: il pattern markdown→codice del notebook impone di spiegare prima di
+    mostrare il codice. Il notebook dev'essere eseguibile top-to-bottom in pochi secondi
+    perché legge risultati salvati, non li ricalcola.
+  * Mappatura: un notebook per domanda di ricerca → corrisponde 1:1 a report ed esposizione.
