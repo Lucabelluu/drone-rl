@@ -445,3 +445,50 @@ buffer delle azioni, spazio e contenuto dell'osservazione.
   sarebbe incontrastabile da qualunque policy e svuoterebbe l'esperimento. Conferma la
   necessità (già prevista) di calibrare l'intensità con uno spike. Il confronto A-vs-B usa
   lo STESSO vento per entrambe → è relativo, quindi il valore assoluto del vento non è il punto.
+
+  ## 17-06-2026 — Lettura di BaseAviary: ordine in step(), iniezione del vento (chiusura lettura ambiente)
+
+Letti dalla fonte installata sul Mac i metodi step(), _updateAndStoreKinematicInformation()
+e _physics() di BaseAviary.py. Con questi si chiude la fase di studio dell'ambiente.
+
+### Conclusione DQ2 — aₜ blindato (ordine delle chiamate in step())
+- Ordine reale dentro step(): (1) _preprocessAction(action) [appende l'azione al
+  action_buffer e la traduce in RPM]; (2) loop fisica, PYB_STEPS_PER_CTRL = 8 sotto-passi
+  a 240 Hz; (3) _updateAndStoreKinematicInformation() [rilegge pos/assetto/vel da PyBullet];
+  (4) _computeObs / _computeReward / _computeTerminated / _computeTruncated / _computeInfo.
+- _preprocessAction gira PRIMA di _computeReward → al momento della reward:
+  aₜ = action_buffer[-1] (azione appena applicata), aₜ₋₁ = action_buffer[-2]. La penalità
+  DQ2 −λ·||action_buffer[-1] − action_buffer[-2]||² è quindi ben definita. Ipotesi confermata.
+- Inoltre lo stato è riletto (punto 3) PRIMA della reward → _computeReward vede la posizione
+  DOPO il passo di fisica (corretto: valuta dove il drone è finito, non dov'era).
+
+### Conclusione DQ3 — punto e modo d'iniezione del vento (DECISA)
+- _physics() applica le spinte dei motori (forces = KF·rpm²) con
+  p.applyExternalForce(..., flags=LINK_FRAME) + coppia di imbardata con applyExternalTorque,
+  una volta per ogni sotto-passo di fisica, subito prima di p.stepSimulation(). Motivo della
+  ripetizione: in PyBullet una forza esterna vale solo per il successivo stepSimulation() e
+  poi si azzera.
+- DECISIONE: il vento si inietta con override di _physics() nella sottoclasse della DQ3:
+  super()._physics(rpm, nth_drone) [mantiene le spinte dei motori] → avanzamento dello stato
+  del vento (Ornstein-Uhlenbeck, a 240 Hz) → p.applyExternalForce sul corpo del drone, forza
+  [Fx, Fy, 0] con flags=p.WORLD_FRAME, applicata al baricentro.
+- Motivazioni:
+  * Idiomatica: l'ambiente già aggiunge forze extra accanto a _physics nello stesso loop
+    (_drag, _downwash, _groundEffect). Il vento è un'altra forza di disturbo → stesso pattern.
+  * Footprint minimo: non si ricopia step() (resta della libreria), poche righe nostre →
+    rispetta la regola "<15% di codice altrui".
+  * Frame corretto: i motori sono in LINK_FRAME (frame locale); il vento in WORLD_FRAME
+    (direzione fissa nel mondo, indipendente dall'orientamento del drone). Applicato al
+    baricentro → nessuna coppia artificiale → spinta laterale pulita: il drone deve inclinarsi
+    per generare spinta orizzontale e tenere la posizione (= dinamica voluta dalla DQ3).
+- Assunzione di modello (dichiarata): il vento è modellato come UN'UNICA forza netta sul
+  corpo, non come carico aerodinamico distribuito sulle superfici. Coerente col diario
+  ("forza esterna applicata al drone") e standard per lo studio. Si lega all'autorità ±5%:
+  la spinta orizzontale opponibile è limitata → vento sensato = piccola % del peso (coerente
+  col piano di calibrazione con spike).
+
+### Stato: lettura dell'ambiente COMPLETA
+- Studiati HoverAviary (reward, fine episodio, Crash Rate), BaseRLAviary (azione rpm, buffer,
+  osservazione, vento non osservato) e BaseAviary (ordine step(), iniezione forze). Tutte le
+  premesse implementative di DQ1/DQ2/DQ3 sono verificate sul codice reale. Prossima fase:
+  implementazione (codice nostro), a partire dall'impalcatura sperimentale della DQ1.
