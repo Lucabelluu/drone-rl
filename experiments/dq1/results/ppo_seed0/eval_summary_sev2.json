@@ -1,0 +1,20 @@
+{
+  "algo": "ppo",
+  "model": "final",
+  "episodes": 100,
+  "eval_seed": 0,
+  "severity": 2.0,
+  "crash_rate_pct": 3.0,
+  "counts": {
+    "crash": 3,
+    "timeout": 97
+  },
+  "mean_return": 469.8264,
+  "mean_length": 235.31,
+  "init_randomization": {
+    "xy": 0.5,
+    "tilt": 0.2,
+    "linvel": 0.6,
+    "angvel": 1.0
+  }
+}

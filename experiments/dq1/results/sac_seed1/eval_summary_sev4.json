@@ -1,0 +1,20 @@
+{
+  "algo": "sac",
+  "model": "final",
+  "episodes": 100,
+  "eval_seed": 0,
+  "severity": 4.0,
+  "crash_rate_pct": 43.0,
+  "counts": {
+    "crash": 43,
+    "timeout": 57
+  },
+  "mean_return": 259.7824,
+  "mean_length": 149.22,
+  "init_randomization": {
+    "xy": 1.0,
+    "tilt": 0.38,
+    "linvel": 1.2,
+    "angvel": 2.0
+  }
+}

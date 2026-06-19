@@ -27,3 +27,9 @@ __pycache__/
 
 # Installer e script di setup scaricati
 .vscode/
+
+# Modelli, normalizzatori e log (riproducibili dal training; fuori da git)
+experiments/**/best_model.zip
+experiments/**/final_model.zip
+experiments/**/vecnormalize.pkl
+experiments/dq1/*_log.txt

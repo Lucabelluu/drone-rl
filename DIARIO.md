@@ -661,3 +661,72 @@ nascondere l'eventuale degrado da instabilità — sarebbe cherry-picking).
   SAC converge molto prima di PPO (~50k vs ~400k): coerente con l'efficienza-dati off-policy.
 - Mantenuti: VecNormalize (osservazioni non normalizzate nell'env; su ENTRAMBI) ed ent_coef=0.1
   per SAC. Conseguenza: si rifanno TUTTI e 6 i run (anche PPO) col nuovo setup. Budget 500k.
+
+  ## 19-06-2026 — DQ1: batch spostato da Colab a locale (M5)
+
+- Tentato il batch dei 6 run su Colab (CPU). SAC sano (reward ~466, episodi pieni,
+  critic_loss ~1) ma throughput a ~33 fps contro ~170 fps dell'M5 → ~5x più lento.
+  Causa: SAC è off-policy e fa un aggiornamento di gradiente a ogni passo (gradient-heavy);
+  la CPU condivisa di Colab lo strozza. La GPU non aiuta (sim PyBullet su CPU + reti MLP piccole).
+- Stima Colab: ~10h residue per i 3 seed SAC → non compatibile con una sessione gratuita.
+- Decisione: eseguo TUTTI e 6 i run in locale sull'M5 (~3h, Mac a temperatura ambiente, fanless).
+  Vantaggio metodologico: tutti i run sullo STESSO ambiente (stessa macchina, stesso numpy)
+  → confronto PPO-vs-SAC senza confound di piattaforma.
+- Comando: caffeinate -i bash scripts/run_dq1.sh (caffeinate impedisce lo sleep durante il run).
+
+## 19-06-2026 — Milestone: proposta di progetto APPROVATA dal professore.
+
+ ## 19-06-2026 — DQ1: batch completo dei 6 run (locale, M5)
+
+- Eseguiti in locale tutti e 6 i run (PPO/SAC × seed 0,1,2), budget 500k, stesso ambiente.
+- Esito: nessuna divergenza, fix SAC validato su tutti e 3 i seed.
+- Convergenza (eval da condizioni default): entrambi risolvono l'hover (reward ~470-474,
+  episodi pieni 242). SAC converge prima (~60-80k) e più uniforme tra seed; PPO più lento
+  (~110-120k) e con maggiore varianza tra seed in fase transitoria → coerente con
+  l'efficienza-dati dell'off-policy.
+- Reward finale: PPO ~474, SAC ~469 (differenza <1%).
+- NOTA onesta: l'instabilità tardiva di PPO osservata in calibrazione (1M) NON compare a 500k:
+  a budget PPO è al picco e stabile. La tesi "convergenza più stabile di SAC" si argomenta su
+  velocità + consistenza tra seed, non su un collasso di PPO. La curva 1M resta come figura
+  supplementare/esplorativa, fuori dal confronto controllato.
+- Crash Rate (metrica 1, da condizioni perturbate via evaluate.py): DA MISURARE.
+
+## 19-06-2026 — DQ1: Crash Rate a condizioni blande = 0% per entrambi → robustness sweep
+
+- Valutazione iniziale (offset ±0.25 m, tilt ±0.1 rad, drone fermo): Crash Rate 0% per TUTTI
+  e 6 i modelli (600 episodi). Test non discriminante: perturbazioni lontane dalle soglie di
+  schianto (1.5 m / 0.4 rad) e reward ~(2 − dist^4) che perdona offset piccoli.
+- Verificato leggendo evaluate.py: la randomizzazione È applicata (initial_xyzs/initial_rpys al
+  costruttore). Lo 0% è reale, non un bug: è la difficoltà, non il codice.
+- Decisione: parametro --severity che scala inclinazione, offset e un CALCIO di velocità
+  lineare/angolare iniziale (disturbo a t=0). Misuro la curva Crash Rate vs severità sui 6
+  modelli (condizioni seeded identiche). Rationale: caratterizzare l'inviluppo di robustezza
+  invece di scegliere una soglia ad hoc. Training NON ritoccato (cambia solo la valutazione).
+
+  - Calibrazione severità (smoke, 20 ep): a severity=4 (tilt 0.38 rad, ang_vel 2.0 rad/s, offset 1.0 m)
+  PPO seed0 schianta 75% → la leva discrimina. Griglia scelta: severity ∈ {1,2,3,4,5}.
+
+  ## 19-06-2026 — DQ1: risultato finale del Crash Rate (robustness sweep)
+
+Metodologia (è un punto di forza, raccontata così):
+- Metrica DQ1: Crash Rate da condizioni iniziali perturbate.
+- Prima valutazione a perturbazioni blande → 0% per ENTRAMBI (600 ep): effetto soffitto,
+  il test non discrimina (entrambi risolvono il task nominale).
+- Un singolo punto facile non misura la robustezza. Progettato un robustness sweep:
+  severità crescente (inclinazione + offset + calcio di velocità a t=0), griglia fissata
+  a priori {1..5}, condizioni seeded IDENTICHE per i due algoritmi, riportata l'intera
+  curva. Training NON ritoccato.
+
+Risultato (Crash Rate %, media ± std su 3 seed):
+  sev | PPO         | SAC
+   1  |  0.0 ± 0.0  |  0.0 ± 0.0
+   2  | 10.7 ± 10.8 |  0.3 ± 0.5
+   3  | 48.3 ± 14.4 |  8.0 ± 1.6
+   4  | 76.3 ± 8.7  | 31.7 ± 8.1
+   5  | 85.3 ± 6.6  | 60.0 ± 8.6
+
+- SAC schianta meno a OGNI livello ≥2 (a sev3: 8% vs 48%), ed è più consistente tra seed.
+- Con la convergenza (SAC ~60-80k vs ~110-120k, più uniforme), DQ1 supportata su entrambi
+  gli assi. VINCITORE DQ1: SAC (off-policy) → passa alla DQ2.
+- Cautela: vittoria attribuita alla FAMIGLIA off-policy, non alla sola "memoria" (SAC
+  differisce anche per entropia, twin critic, architettura).
