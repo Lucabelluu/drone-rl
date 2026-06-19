@@ -1,11 +1,10 @@
 """
 evaluate.py — Valuta una policy addestrata su N episodi di hovering e calcola il Crash Rate.
-Per ogni episodio randomizza le condizioni iniziali (seeded, identiche per tutti i modelli),
-poi classifica la fine come crash / timeout / target riapplicando le soglie native di
-HoverAviary. Salva un log per-episodio (CSV) e un riepilogo (JSON) nella cartella del run.
+Randomizza le condizioni iniziali (seeded, identiche per tutti i modelli), normalizza le
+osservazioni con le statistiche salvate dal training (VecNormalize), e classifica la fine
+come crash / timeout riapplicando le soglie native di HoverAviary sullo stato finale.
 """
 import os
-# Stesso conflitto OpenMP di train.py: va disinnescato PRIMA di importare torch/SB3.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import argparse
@@ -15,42 +14,29 @@ from pathlib import Path
 
 import numpy as np
 from stable_baselines3 import PPO, SAC
+from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 
-from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 from gym_pybullet_drones.utils.enums import ObservationType, ActionType
+from envs.hover_terminal import HoverAviaryTerminal, is_crash
 
 ALGOS = {"ppo": PPO, "sac": SAC}
 TARGET_POS = np.array([0.0, 0.0, 1.0])
 
-# Ampiezza della randomizzazione iniziale (dentro l'inviluppo di sicurezza).
-INIT_XY = 0.25                          # offset orizzontale max in m
-INIT_Z_LOW, INIT_Z_HIGH = 0.75, 1.25    # quota iniziale in m
-INIT_TILT = 0.1                         # roll/pitch iniziale max in rad (crash a 0.4)
-
-
-def is_crash(state):
-    """Riapplica le 5 soglie native di HoverAviary._computeTruncated sullo stato grezzo."""
-    x, y, z = state[0], state[1], state[2]
-    roll, pitch = state[7], state[8]
-    return bool(abs(x) > 1.5 or abs(y) > 1.5 or z > 2.0
-                or abs(roll) > 0.4 or abs(pitch) > 0.4)
+INIT_XY = 0.25
+INIT_Z_LOW, INIT_Z_HIGH = 0.75, 1.25
+INIT_TILT = 0.1
 
 
 def parse_args():
     p = argparse.ArgumentParser(description="Valutazione di una policy su HoverAviary (Crash Rate).")
-    p.add_argument("--run-dir", required=True,
-                   help="Cartella del run da valutare (es. experiments/dq1/results/ppo_seed0).")
-    p.add_argument("--episodes", type=int, default=100,
-                   help="Numero di episodi di valutazione (default 100).")
-    p.add_argument("--eval-seed", type=int, default=0,
-                   help="Seed che fissa le condizioni iniziali (uguale per tutti i modelli).")
-    p.add_argument("--model", choices=["final", "best"], default="final",
-                   help="Quale modello valutare (default: final).")
+    p.add_argument("--run-dir", required=True)
+    p.add_argument("--episodes", type=int, default=100)
+    p.add_argument("--eval-seed", type=int, default=0)
+    p.add_argument("--model", choices=["final", "best"], default="final")
     return p.parse_args()
 
 
 def load_model(run_dir, which):
-    """Carica il modello giusto leggendo l'algoritmo da config.json."""
     cfg = json.loads((run_dir / "config.json").read_text())
     algo = cfg["algo"]
     model_path = run_dir / ("final_model.zip" if which == "final" else "best_model.zip")
@@ -59,8 +45,21 @@ def load_model(run_dir, which):
     return ALGOS[algo].load(str(model_path)), algo
 
 
+def load_normalizer(run_dir):
+    """Carica le statistiche di normalizzazione delle osservazioni salvate dal training."""
+    stats = run_dir / "vecnormalize.pkl"
+    if not stats.exists():
+        raise SystemExit(f"[STOP] vecnormalize.pkl non trovato in {run_dir}")
+    dummy = DummyVecEnv([lambda: HoverAviaryTerminal(obs=ObservationType("kin"), act=ActionType("rpm"))])
+    vec = VecNormalize.load(str(stats), dummy)
+    dummy.close()
+    rms, clip, eps = vec.obs_rms, vec.clip_obs, vec.epsilon
+    def normalize(obs):
+        return np.clip((obs - rms.mean) / np.sqrt(rms.var + eps), -clip, clip).astype(np.float32)
+    return normalize
+
+
 def sample_init(rng):
-    """Una condizione iniziale (posizione + assetto), forma (1,3) richiesta da HoverAviary."""
     xyz = np.array([[rng.uniform(-INIT_XY, INIT_XY),
                      rng.uniform(-INIT_XY, INIT_XY),
                      rng.uniform(INIT_Z_LOW, INIT_Z_HIGH)]])
@@ -70,25 +69,19 @@ def sample_init(rng):
     return xyz, rpy
 
 
-def run_episode(model, xyz, rpy, seed):
-    """Un episodio deterministico; ritorna (motivo, passi, ritorno, distanza finale)."""
-    env = HoverAviary(obs=ObservationType("kin"), act=ActionType("rpm"),
-                      initial_xyzs=xyz, initial_rpys=rpy, gui=False)
+def run_episode(model, normalize, xyz, rpy, seed):
+    env = HoverAviaryTerminal(obs=ObservationType("kin"), act=ActionType("rpm"),
+                              initial_xyzs=xyz, initial_rpys=rpy, gui=False)
     obs, _ = env.reset(seed=seed)
     terminated = truncated = False
     ep_return, ep_len = 0.0, 0
     while not (terminated or truncated):
-        action, _ = model.predict(obs, deterministic=True)
+        action, _ = model.predict(normalize(obs), deterministic=True)
         obs, reward, terminated, truncated, _ = env.step(action)
         ep_return += float(reward)
         ep_len += 1
     state = env._getDroneStateVector(0)
-    if terminated:
-        reason = "target"
-    elif is_crash(state):
-        reason = "crash"
-    else:
-        reason = "timeout"
+    reason = "crash" if is_crash(state) else "timeout"
     dist = float(np.linalg.norm(TARGET_POS - state[0:3]))
     env.close()
     return reason, ep_len, ep_return, dist
@@ -98,15 +91,15 @@ def main():
     args = parse_args()
     run_dir = Path(args.run_dir)
     model, algo = load_model(run_dir, args.model)
+    normalize = load_normalizer(run_dir)
 
-    # RNG dedicato: le condizioni iniziali sono identiche per ogni modello valutato.
     rng = np.random.default_rng(args.eval_seed)
     inits = [sample_init(rng) for _ in range(args.episodes)]
 
     rows = []
-    counts = {"crash": 0, "timeout": 0, "target": 0}
+    counts = {"crash": 0, "timeout": 0}
     for i, (xyz, rpy) in enumerate(inits):
-        reason, ep_len, ep_return, dist = run_episode(model, xyz, rpy, args.eval_seed + i)
+        reason, ep_len, ep_return, dist = run_episode(model, normalize, xyz, rpy, args.eval_seed + i)
         counts[reason] += 1
         rows.append({"episode": i, "reason": reason, "length": ep_len,
                      "return": round(ep_return, 4), "dist_to_target": round(dist, 4)})
@@ -120,11 +113,8 @@ def main():
         w.writerows(rows)
 
     summary = {
-        "algo": algo,
-        "model": args.model,
-        "episodes": args.episodes,
-        "eval_seed": args.eval_seed,
-        "crash_rate_pct": round(crash_rate, 2),
+        "algo": algo, "model": args.model, "episodes": args.episodes,
+        "eval_seed": args.eval_seed, "crash_rate_pct": round(crash_rate, 2),
         "counts": counts,
         "mean_return": round(float(np.mean([r["return"] for r in rows])), 4),
         "mean_length": round(float(np.mean([r["length"] for r in rows])), 2),
@@ -134,7 +124,7 @@ def main():
         json.dump(summary, f, indent=2)
 
     print(f"\n[RESULT] {algo} ({args.model}) — Crash Rate: {crash_rate:.2f}%  "
-          f"(crash={counts['crash']}, timeout={counts['timeout']}, target={counts['target']})")
+          f"(crash={counts['crash']}, timeout={counts['timeout']})")
     print(f"[INFO] Scritti eval_episodes.csv e eval_summary.json in {run_dir}")
 
 

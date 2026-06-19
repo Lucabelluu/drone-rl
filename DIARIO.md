@@ -632,3 +632,32 @@ nascondere l'eventuale degrado da instabilità — sarebbe cherry-picking).
   eval_summary.json (Crash Rate, conteggi, medie, parametri di randomizzazione → tracciabile).
 - Smoke test superato: su un PPO da 10k passi (volutamente pessimo), 5 episodi tutti crash,
   file scritti, classificazione coerente. Pipeline di valutazione validata.
+
+  ## 18-06-2026 — DQ1: calibrazione del budget di training
+
+- Sonda: PPO seed 0 a 1.000.000 di passi (~5 min su M5, ~1250 fps).
+- Curva di apprendimento (eval reward vs timesteps): convergenza entro ~400k (reward da ~40
+  a ~470, poi plateau). Dopo il plateau PPO oscilla e crolla nettamente vicino a 1M (→ ~275):
+  instabilità on-policy attesa, oggetto della metrica 2 di DQ1.
+- DECISIONE: budget ufficiale = 500.000 passi per tutti e 6 i run (PPO/SAC × seed 0,1,2).
+  Appena oltre la convergenza con margine; non fissato in un punto arbitrariamente lontano
+  (es. 1M) dove un crollo tardivo casuale distorcerebbe il confronto. Stesso budget per
+  entrambi = confronto equo. Si valuta il final_model → l'instabilità entra onestamente nel
+  risultato via varianza tra seed.
+- Throughput PPO ~1250 passi/sec → 500k ≈ 7 min/run; SAC più lento, da misurare al primo run.
+
+## 19-06-2026 — DQ1: SAC divergeva — causa radice e fix (terminated-on-crash)
+
+- Sintomo: SAC esplodeva (critic_loss fino a 1e21, episodi di 4 passi), anche dopo aver
+  normalizzato le osservazioni (VecNormalize) e fissato ent_coef. PPO invece convergeva.
+- Causa RADICE (dai numeri: Q ~1e8 con reward limitata in [0,2] è impossibile imparando,
+  solo auto-alimentandosi): HoverAviary segnala lo SCHIANTO come `truncated`. Gli off-policy
+  (SAC) bootstrappano il valore futuro degli stati troncati → stimano il valore di stati GIÀ
+  schiantati, e siccome ogni episodio finisce così, la stima diverge. PPO è robusto, SAC no.
+- Fix: sottoclasse HoverAviaryTerminal (src/envs/hover_terminal.py) — schianto = `terminated`
+  (valore futuro 0), solo il tempo scaduto resta `truncated`. Più corretto anche
+  semanticamente. Usata in training e valutazione.
+- Esito: a 50k passi SAC raggiunge reward ~446 ed episodi pieni (242 passi), loss normali.
+  SAC converge molto prima di PPO (~50k vs ~400k): coerente con l'efficienza-dati off-policy.
+- Mantenuti: VecNormalize (osservazioni non normalizzate nell'env; su ENTRAMBI) ed ent_coef=0.1
+  per SAC. Conseguenza: si rifanno TUTTI e 6 i run (anche PPO) col nuovo setup. Budget 500k.

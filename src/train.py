@@ -20,9 +20,12 @@ from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.vec_env import VecNormalize
 
 from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 from gym_pybullet_drones.utils.enums import ObservationType, ActionType
+
+from envs.hover_terminal import HoverAviaryTerminal
 
 # Punti voluti sulla curva di apprendimento, a prescindere dal budget.
 N_EVAL_POINTS = 50
@@ -105,14 +108,20 @@ def main():
 
     # 4) Ambienti: hovering z=1, osservazione cinematica, azione sui 4 motori (rpm).
     env_kwargs = dict(obs=ObservationType("kin"), act=ActionType("rpm"))
-    train_env = make_vec_env(HoverAviary, env_kwargs=env_kwargs, n_envs=1, seed=args.seed)
-    # Ambiente di valutazione separato, seed diverso per tenerlo indipendente dal training.
-    eval_env = make_vec_env(HoverAviary, env_kwargs=env_kwargs, n_envs=1, seed=args.seed + 1000)
+    # L'osservazione KIN è grezza e con limiti infiniti (verificato in BaseRLAviary): SAC diverge
+    # senza normalizzazione. VecNormalize su ENTRAMBI = stesso pre-processing, confronto equo.
+    train_env = make_vec_env(HoverAviaryTerminal, env_kwargs=env_kwargs, n_envs=1, seed=args.seed)
+    train_env = VecNormalize(train_env, norm_obs=True, norm_reward=False)
+    eval_env = make_vec_env(HoverAviaryTerminal, env_kwargs=env_kwargs, n_envs=1, seed=args.seed + 1000)
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, training=False)
 
-    # 5) Modello: iperparametri di DEFAULT di SB3 per entrambi (scelta documentata nel diario).
-    model = ALGOS[args.algo]("MlpPolicy", train_env, seed=args.seed, verbose=1)
-    with open(run_dir / "hyperparams.json", "w") as f:
-        json.dump(extract_hyperparams(model), f, indent=2)
+    # 5) Modello. Default di SB3, con UNA eccezione per SAC: ent_coef fisso.
+    #    Su questo ambiente l'auto-tuning dell'entropia di SAC diverge (ent_coef esplode);
+    #    lo fissiamo per stabilità. PPO resta sui default (non ne ha bisogno).
+    algo_kwargs = dict(seed=args.seed, verbose=1)
+    if args.algo == "sac":
+        algo_kwargs["ent_coef"] = 0.1
+    model = ALGOS[args.algo]("MlpPolicy", train_env, **algo_kwargs)
 
     # 6) Valutazione SENZA early stopping: logga la curva (evaluations.npz) e salva best_model.
     #    eval_freq derivato dal budget per avere ~N_EVAL_POINTS punti sulla curva.
@@ -132,9 +141,9 @@ def main():
 
     # 8) Salvataggio del modello finale e chiusura.
     model.save(str(run_dir / "final_model"))
+    train_env.save(str(run_dir / "vecnormalize.pkl"))   # statistiche di normalizzazione (servono in valutazione)
     train_env.close()
     eval_env.close()
-    print(f"[INFO] Fatto. Artefatti in: {run_dir}")
 
 
 if __name__ == "__main__":
