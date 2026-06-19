@@ -609,3 +609,26 @@ esterno (script di shell), così un run che fallisce non trascina gli altri.
   allo script (vedi blocco dedicato).
 - Smoke test superato: PPO e SAC a 5000 passi addestrano, loggano e salvano tutti gli
   artefatti. Budget reale ancora da calibrare.
+
+  ## 18-06-2026 — evaluate.py: Crash Rate e classificazione della fine episodio
+
+Scritto src/evaluate.py: valuta una policy su N episodi (default 100) e calcola il Crash
+Rate. Carica final_model.zip (deciso: modello a fine budget, non best_model, per non
+nascondere l'eventuale degrado da instabilità — sarebbe cherry-picking).
+
+- Classificazione della fine: _computeTerminated scatta solo entro 0.0001 m dal target →
+  di fatto MAI. Quindi ogni episodio finisce per truncated, in due casi: crash (almeno una
+  delle 5 soglie native: |x|>1.5, |y|>1.5, z>2.0, |roll|>0.4, |pitch|>0.4) oppure timeout
+  (8 s dentro i limiti = hover riuscito). Le 5 soglie sono riapplicate sullo stato grezzo
+  finale (_getDroneStateVector) → classificazione coerente per costruzione col codice nativo.
+  Crash Rate = crash / N.
+- Variabilità necessaria: con policy deterministica e reset deterministico (verificato: nessun
+  np.random negli env) i 100 episodi sarebbero identici. Soluzione: randomizzazione SEEDED
+  delle condizioni iniziali (posizione e assetto, via initial_xyzs/initial_rpys), con RNG
+  dedicato → le 100 condizioni sono IDENTICHE per ogni modello (PPO/SAC, tutti i seed) =
+  confronto equo. Scartata la policy stocastica per non penalizzare SAC col suo rumore.
+  Ampiezza iniziale (da calibrare): pos ±0.25 m in x,y e z∈[0.75,1.25], assetto ±0.1 rad.
+- Output per run: eval_episodes.csv (motivo/durata/ritorno/distanza per episodio) e
+  eval_summary.json (Crash Rate, conteggi, medie, parametri di randomizzazione → tracciabile).
+- Smoke test superato: su un PPO da 10k passi (volutamente pessimo), 5 episodi tutti crash,
+  file scritti, classificazione coerente. Pipeline di valutazione validata.
