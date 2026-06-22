@@ -730,3 +730,21 @@ Risultato (Crash Rate %, media ± std su 3 seed):
   gli assi. VINCITORE DQ1: SAC (off-policy) → passa alla DQ2.
 - Cautela: vittoria attribuita alla FAMIGLIA off-policy, non alla sola "memoria" (SAC
   differisce anche per entropia, twin critic, architettura).
+
+  ## [2026-06-20] Riorganizzazione cartella per allineamento alle linee guida
+
+**Decisioni:**
+- Creata `results/` alla radice con `figures/` e `tables/`: ospiterà le figure/tabelle FINALI esportate dai notebook. Il prof richiede che gli output non restino solo nelle celle ma siano salvati come file.
+- NON creata `data/`: progetto basato su ambiente (gym-pybullet-drones), non su dataset. Una `data/` vuota sarebbe una cartella senza scopo (penalizzata sotto "organizzazione").
+- Mantenute `scripts/` e `src/` (fuori dal template del prof): scelta deliberata per training atomico multi-seed → confronto equo e riproducibile, preferibile a un notebook monolitico. Da giustificare nel README.
+- NON rinominata `experiments/dq1/results/`: il nome collide con la convenzione del prof (results = output finali) ma il rename rischia di rompere path hardcoded; la distinzione viene chiarita nel README.
+- Eliminato `tmp_plot_curve.py`: script usa-e-getta; la sua logica (curva di apprendimento da evaluations.npz) è riusata nel notebook DQ1.
+- Creato `README.md` (stub): pagina d'ingresso obbligatoria, da compilare come passo dedicato.
+
+## [2026-06-22] DQ1 chiusa — notebook di analisi documentato
+
+- Notebook notebooks/dq1_confronto_ppo_sac.ipynb completato: sola lettura degli artefatti, esporta figure in results/figures/ e tabelle in results/tables/. Markdown esplicativo sopra ogni cella di codice, con dichiarazione di provenienza dei dati (train.py / evaluate.py / aggregate_eval.py). Restart & Run All pulito.
+- Figure finali: dq1_crashrate_vs_severity.png, dq1_convergence.png.
+- Tabelle finali: dq1_crashrate_summary.csv (completa), dq1_crashrate_table.csv (sintetica per slide).
+- Metrica di convergenza: soglia reward=400 (~83% del max ~480), scelta di reporting dichiarata. SAC supera 400 a ~60k passi, PPO a ~110k.
+- Verdetto confermato: vince SAC (off-policy) su Crash Rate e su velocità/stabilità di convergenza; plateau finale equivalente (~470). SAC va in DQ2.

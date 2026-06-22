@@ -10,13 +10,14 @@ from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 def is_crash(state):
     """Le 5 soglie native di schianto di HoverAviary (posizione e assetto fuori limite)."""
     x, y, z = state[0], state[1], state[2]
-    roll, pitch = state[7], state[8]
+    roll, pitch = state[7], state[8]        # vettore di stato: [0:3]=xyz, [7:10]=rpy  ->  roll=7, pitch=8
     return bool(abs(x) > 1.5 or abs(y) > 1.5 or z > 2.0
                 or abs(roll) > 0.4 or abs(pitch) > 0.4)
 
 
 class HoverAviaryTerminal(HoverAviary):
     def _computeTerminated(self):
+        # Schianto = uscita dall'inviluppo di volo sicuro (is_crash) = stato TERMINALE.
         return is_crash(self._getDroneStateVector(0))
 
     def _computeTruncated(self):

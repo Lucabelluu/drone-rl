@@ -32,4 +32,6 @@ __pycache__/
 experiments/**/best_model.zip
 experiments/**/final_model.zip
 experiments/**/vecnormalize.pkl
+
 experiments/dq1/*_log.txt
+NOTE_ORALE.md

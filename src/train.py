@@ -110,7 +110,9 @@ def main():
     env_kwargs = dict(obs=ObservationType("kin"), act=ActionType("rpm"))
     # L'osservazione KIN è grezza e con limiti infiniti (verificato in BaseRLAviary): SAC diverge
     # senza normalizzazione. VecNormalize su ENTRAMBI = stesso pre-processing, confronto equo.
+    # kin = stato cinematico (pos/assetto/velocità); rpm = azione = giri dei 4 motori
     train_env = make_vec_env(HoverAviaryTerminal, env_kwargs=env_kwargs, n_envs=1, seed=args.seed)
+    # norm_reward=False: tengo il reward grezzo (0-2) per ritorni interpretabili e comparabili (~480 max)
     train_env = VecNormalize(train_env, norm_obs=True, norm_reward=False)
     eval_env = make_vec_env(HoverAviaryTerminal, env_kwargs=env_kwargs, n_envs=1, seed=args.seed + 1000)
     eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, training=False)
