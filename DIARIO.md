@@ -748,3 +748,26 @@ Risultato (Crash Rate %, media ± std su 3 seed):
 - Tabelle finali: dq1_crashrate_summary.csv (completa), dq1_crashrate_table.csv (sintetica per slide).
 - Metrica di convergenza: soglia reward=400 (~83% del max ~480), scelta di reporting dichiarata. SAC supera 400 a ~60k passi, PPO a ~110k.
 - Verdetto confermato: vince SAC (off-policy) su Crash Rate e su velocità/stabilità di convergenza; plateau finale equivalente (~470). SAC va in DQ2.
+
+## [2026-06-23] Documentazione DQ1: notebook, README, requirements
+
+**Notebook (notebooks/dq1_confronto_ppo_sac.ipynb):**
+- Passata di documentazione completa: markdown esplicativo sopra ogni cella di codice, in prima persona, registro espositivo (no discorso interno). Dichiarata la provenienza dei dati (train.py / evaluate.py / aggregate_eval.py) senza duplicare la spiegazione del funzionamento, che vive nel README.
+- Verificato con Restart & Run All pulito.
+
+**README.md — scritta la v1 (consegnabile):**
+- Sezioni: Panoramica, Domande di ricerca (verbatim), Ambiente e installazione (procedura passo-passo per macOS Apple Silicon, con git checkout 9bc12bc per pinnare la versione del simulatore), Struttura della repository, Metodologia sperimentale, Domanda 1 (impostazione + riproduzione + risultati), Crediti e riferimenti.
+- Ruolo del README fissato: guida tecnica al progetto finito (cos'è, com'è fatto e perché, come si riproduce, risultati). La cronaca delle prove resta nel DIARIO; il "come dirlo all'orale" resta in NOTE_ORALE.md. Niente frasi di stato, niente giustificazioni sul template del prof: struttura presentata in positivo.
+- Riproduzione DQ1 resa interamente eseguibile da terminale: il passo di analisi usa `jupyter nbconvert --execute` invece di un'azione manuale in VS Code. Conseguenza: jupyter aggiunto come dipendenza.
+- Attribuzione esplicita: algoritmi (PPO/SAC) da stable-baselines3, ambiente da gym-pybullet-drones; dichiarato cosa è contributo originale.
+
+**requirements.txt — reso riproducibile:**
+- Rimosse 3 righe con path locali (`numpy @ file:///...`, `pybullet @ file:///...`, `packaging @ file:///...`) che facevano fallire l'install su altre macchine, e la riga `-e git+...` che avrebbe riclonato il simulatore in conflitto con l'installazione manuale.
+- Pin espliciti: numpy==2.2.6, pybullet==3.2.5 (via conda-forge, non pip), packaging==26.2, aggiunto jupyter_core==5.9.1.
+- Chiarito in testa al file che NON è un installer a un colpo: l'installazione canonica è la procedura del README.
+
+**Due errori git intercettati col controllo di `git status` pre-commit (lezione: rileggere sempre lo stage):**
+- NOTE_ORALE.md e i *_log.txt erano finiti in stage: il .gitignore non li filtrava perché due regole erano state scritte sulla stessa riga senza a capo (`*_log.txtNOTE_ORALE.md`). Corretto il .gitignore (una regola per riga) e verificato con `git check-ignore`.
+- Un file in stage non è più toccato da .gitignore: vanno tolti a mano con `git restore --staged`.
+
+**Stato: DQ1 chiusa e pushata** (esperimenti + notebook + README + requirements). Prossimo: DQ2 (reward shaping fluidità su SAC) in chat nuova; decisioni aperte da affrontare = valori di λ, definizione numerica di "fluidità", criterio operativo di "tempo al target". Debito: README da estendere con DQ2/DQ3.
