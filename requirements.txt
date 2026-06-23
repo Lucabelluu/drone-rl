@@ -1,7 +1,9 @@
-# NOTA INSTALLAZIONE pybullet:
-# Su macOS Apple Silicon con compilatori recenti, pybullet via pip può fallire la compilazione.
-# Installare pybullet PRIMA via conda:  conda install -c conda-forge pybullet
-# poi installare le altre dipendenze. Vedi DIARIO.md (15-06-2026) per i dettagli.
+# requirements.txt — versioni esatte dell'ambiente di riferimento (Python 3.10, macOS Apple Silicon).
+# NON è un installer a un colpo: l'installazione canonica è la procedura passo-passo nel README.
+# In particolare pybullet va installato via conda-forge (non via pip): vedi README e DIARIO.md (15-06-2026).
+
+# gym-pybullet-drones NON è installato via pip: si installa manualmente (vedi README, Installazione).
+# Versione esatta usata: commit 9bc12bc del repo ufficiale https://github.com/utiasDSL/gym-pybullet-drones
 
 cloudpickle==3.1.2
 contourpy==1.3.2
@@ -12,22 +14,22 @@ Farama-Notifications==0.0.6
 filelock==3.29.4
 fonttools==4.63.0
 fsspec==2026.4.0
--e git+https://github.com/utiasDSL/gym-pybullet-drones.git@9bc12bc583fa3b28807b2f90a8cadf09fb06e1ff#egg=gym_pybullet_drones
 gymnasium==1.2.3
 iniconfig==2.3.0
 Jinja2==3.1.6
+jupyter_core==5.9.1
 kiwisolver==1.5.0
 MarkupSafe==3.0.3
 matplotlib==3.10.9
 mpmath==1.3.0
 networkx==3.4.2
-numpy @ file:///Users/runner/miniforge3/conda-bld/numpy_1747544633931/work/dist/numpy-2.2.6-cp310-cp310-macosx_11_0_arm64.whl#sha256=50a17562ef677de6531058e998e32487919c216e19ca4e1bdd86b0e1262251c1
-packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1777103621/work
+numpy==2.2.6
+packaging==26.2
 pandas==2.3.3
 pillow==12.2.0
 pluggy==1.6.0
 poetry-core==2.4.1
-pybullet @ file:///Users/runner/miniforge3/conda-bld/bullet_1761060387420/work
+pybullet==3.2.5
 Pygments==2.20.0
 pyparsing==3.3.2
 pytest==9.1.0
