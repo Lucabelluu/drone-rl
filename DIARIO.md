@@ -731,7 +731,7 @@ Risultato (Crash Rate %, media ± std su 3 seed):
 - Cautela: vittoria attribuita alla FAMIGLIA off-policy, non alla sola "memoria" (SAC
   differisce anche per entropia, twin critic, architettura).
 
-  ## [2026-06-20] Riorganizzazione cartella per allineamento alle linee guida
+  ## [20-06-2026] Riorganizzazione cartella per allineamento alle linee guida
 
 **Decisioni:**
 - Creata `results/` alla radice con `figures/` e `tables/`: ospiterà le figure/tabelle FINALI esportate dai notebook. Il prof richiede che gli output non restino solo nelle celle ma siano salvati come file.
@@ -741,7 +741,7 @@ Risultato (Crash Rate %, media ± std su 3 seed):
 - Eliminato `tmp_plot_curve.py`: script usa-e-getta; la sua logica (curva di apprendimento da evaluations.npz) è riusata nel notebook DQ1.
 - Creato `README.md` (stub): pagina d'ingresso obbligatoria, da compilare come passo dedicato.
 
-## [2026-06-22] DQ1 chiusa — notebook di analisi documentato
+## [22-06-2026] DQ1 chiusa — notebook di analisi documentato
 
 - Notebook notebooks/dq1_confronto_ppo_sac.ipynb completato: sola lettura degli artefatti, esporta figure in results/figures/ e tabelle in results/tables/. Markdown esplicativo sopra ogni cella di codice, con dichiarazione di provenienza dei dati (train.py / evaluate.py / aggregate_eval.py). Restart & Run All pulito.
 - Figure finali: dq1_crashrate_vs_severity.png, dq1_convergence.png.
@@ -749,7 +749,8 @@ Risultato (Crash Rate %, media ± std su 3 seed):
 - Metrica di convergenza: soglia reward=400 (~83% del max ~480), scelta di reporting dichiarata. SAC supera 400 a ~60k passi, PPO a ~110k.
 - Verdetto confermato: vince SAC (off-policy) su Crash Rate e su velocità/stabilità di convergenza; plateau finale equivalente (~470). SAC va in DQ2.
 
-## [2026-06-23] Documentazione DQ1: notebook, README, requirements
+
+## [23-06-2026] Documentazione DQ1: notebook, README, requirements
 
 **Notebook (notebooks/dq1_confronto_ppo_sac.ipynb):**
 - Passata di documentazione completa: markdown esplicativo sopra ogni cella di codice, in prima persona, registro espositivo (no discorso interno). Dichiarata la provenienza dei dati (train.py / evaluate.py / aggregate_eval.py) senza duplicare la spiegazione del funzionamento, che vive nel README.
@@ -771,3 +772,152 @@ Risultato (Crash Rate %, media ± std su 3 seed):
 - Un file in stage non è più toccato da .gitignore: vanno tolti a mano con `git restore --staged`.
 
 **Stato: DQ1 chiusa e pushata** (esperimenti + notebook + README + requirements). Prossimo: DQ2 (reward shaping fluidità su SAC) in chat nuova; decisioni aperte da affrontare = valori di λ, definizione numerica di "fluidità", criterio operativo di "tempo al target". Debito: README da estendere con DQ2/DQ3.
+
+## [26-06-2026] DQ1 chiusa definitivamente — rivalutazione con pipeline corretta + figura ritorno
+VecNormalize ricaricato, lettura dello stato pre-step). Il bug di normalizzazione della prima
+valutazione era sistematico (identico per PPO e SAC), quindi non ha alterato il confronto relativo.
+Crash Rate aggiornati (media 3 seed): sev2 PPO ~11% / SAC ~0%; sev3 PPO ~48% / SAC ~8%;
+sev4 PPO ~76% / SAC ~32%; sev5 PPO ~85% / SAC ~60%. SAC schianta meno di PPO a ogni livello, con
+ritorni più alti ed episodi più lunghi a parità di severità e banda tra seed più stretta.
+Verdetto DQ1 confermato: l'off-policy con memoria (SAC) è più robusto dell'on-policy reattivo (PPO).
+
+Aggiunta una seconda figura di robustezza (dq1_return_vs_severity.png): la ricompensa media di
+valutazione in funzione della severità. Mostra che a parità di perturbazione SAC mantiene ritorni
+più alti di PPO (sev4 ~300 vs ~123; sev5 ~173 vs ~75): la robustezza si conferma su un asse
+indipendente dal Crash Rate.
+
+## DQ2 — Reward shaping per la fluidità (su SAC) — DECISIONI CHIUSE
+
+Obiettivo: aggiungere alla reward nativa una penalità sugli scatti di comando ai motori
+(reward_shaped = reward_nativa − λ·‖aₜ − aₜ₋₁‖²) e misurare (a) se il volo diventa più
+fluido in modo significativo e (b) quanto questo costa sul tempo per stabilizzarsi al target.
+Confronto: SAC base (λ=0, già addestrata in DQ1) vs SAC shaped (λ>0). Budget identico a DQ1
+(500k timestep, seed 0/1/2), niente early stopping, si valuta final_model.
+
+### Decisione 1 — definizione numerica di "fluidità"
+- PRIMARIA (= "fluidità"): media/RMS di ‖ω‖ (norma della velocità angolare del corpo,
+  stato[13:16]) calcolata SOLO nella fase di hover stazionario (dall'istante di arrivo al
+  target fino a fine episodio). Bassa = volo fermo e liscio.
+- SECONDARIA (= il meccanismo): media di ‖aₜ − aₜ₋₁‖, dichiarata come "la grandezza che ho
+  ottimizzato". Prova che la penalità ha agito sui comandi, NON prova di fluidità.
+- Motivo: la metrica di fluidità deve stare a VALLE della penalità, non coincidervi, altrimenti
+  è circolare ("ho minimizzato X, guarda, X è sceso"). ‖ω‖ è una conseguenza, non il termine
+  penalizzato. Scartato il jerk di posizione: richiede due derivate numeriche in più (rumore),
+  e per un hover ‖ω‖ cattura il "traballio" in modo più diretto ed economico.
+
+### Decisione 2 — valori di λ
+- Sweep logaritmico: λ ∈ {0, 0.01, 0.1, 1.0}. λ=0 = baseline = SAC DQ1, NON riaddestrata.
+- Motivo: λ moltiplica un termine di penalità; l'effetto interessante è il passaggio da "tassa
+  irrilevante" a "tassa che morde", che si vede meglio su scala log (×10) che su passi lineari.
+  Tre valori >0 bastano a raccontare il trend (poco/medio/tanto) senza sprecare run; λ=1.0 è il
+  punto che mostra "quanto incide" sul tempo. Quattro condizioni totali.
+- Compute: 3 λ × 3 seed = 9 run nuovi da 500k (~33 min/run ≈ 5h totali) + 1 smoke test.
+
+### Decisione 3 — definizione operativa di "tempo al target"
+- Tempo al target = primo istante (s) di una finestra in cui il drone resta entro δ=0.10 m dal
+  TARGET [0,0,1] per almeno W=0.5 s consecutivi (15 step a 30 Hz di controllo).
+- δ=0.10 m: interpretabile ("10 cm dal punto"), coerente con la reward (dist=0.1 → reward≈2.0),
+  raggiungibile con l'autorità di comando rpm (±5% HOVER_RPM). Scartato δ=0.05 (troppo stretto).
+- W=0.5 s: il "dwell" distingue "si è stabilizzato" da "ci è passato" (un fly-through resta nella
+  pallina 1-2 step, non 15). Senza dwell misurerei il primo attraversamento = rumore.
+- Onestà sui fallimenti: se la finestra sostenuta non viene mai raggiunta (schianto o nessuna
+  stabilizzazione), il tempo al target è INDEFINITO, non 8 s. Riporto DUE numeri:
+  (1) settle rate = % episodi che si stabilizzano davvero;
+  (2) tempo MEDIANO al target, solo sugli episodi stabilizzati (mediana > media: robusta agli
+  episodi-limite). Mai mediare un finto "8 s" sui falliti: gonfierebbe a favore di chi schianta poco.
+
+### Collegamento Dec.1 ↔ Dec.3
+L'istante di "arrivo al target" (Dec.3) è anche l'inizio della finestra su cui misuro ‖ω‖ (Dec.1):
+un solo confine, due metriche. La fluidità si misura solo quando il drone è effettivamente in hover,
+non mentre ci sta arrivando. Episodi mai stabilizzati non entrano nella media di fluidità (dichiarato).
+
+### Paletti metodologici (vincolanti per DQ2)
+- Si ADDESTRA con la reward shaped, ma si VALUTA sempre sull'obiettivo VERO (reward nativa,
+  is_crash, tempo al target), mai sulla reward shaped: altrimenti i λ alti sembrano peggiori solo
+  perché tassati (confronto falsato). Stessa logica del norm_reward=False della DQ1.
+- Smoke test a λ=1.0 (1 seed, ~50k) PRIMA del batch: conferma che la policy impara ancora a fare
+  hover sotto la penalità più forte. Se 1.0 collassa, si abbassa a 0.5 prima di spendere 3 seed.
+- L'azione precedente aₜ₋₁ NON è leggibile dallo stato[16:20] (al momento del calcolo è già aₜ):
+  va conservata in self._prev_action nell'env shaped, aggiornata a fine step, azzerata al reset.
+
+## DQ2 — Reward shaping per la fluidità (su SAC)
+
+Obiettivo: aggiungere alla reward nativa una penalità quadratica sulla variazione del comando ai
+motori (reward_shaped = reward_nativa − λ·‖aₜ − aₜ₋₁‖²) e misurare se il volo diventa più fluido e
+quanto costa in tempo. Confronto: SAC base (λ=0, DQ1) vs SAC shaped. Budget identico (500k, 3 seed),
+niente early stopping, si valuta final_model.
+
+### Sweep di λ
+λ ∈ {0, 0.1, 0.5, 0.8}. Selezione guidata da smoke test (1 seed, 50k) prima del batch:
+- λ=1.0 → collasso (il drone resta fermo per non pagare la penalità): scartato.
+- λ=0.5 e 0.8 → promossi (volano allo smoke). λ=0.01 scartato (effetto indistinguibile da 0.1).
+9 run shaped (3 λ × 3 seed) da 500k, in locale su M5 (~4h52m totali, ~32 min/run).
+
+### Metriche DQ2 (continue, senza soglia "arrivato sì/no")
+Misurate sulla finestra finale di 1 s di ogni episodio non-crash:
+- distanza di assestamento (mediana della distanza dal target) — quanto vicino si ferma;
+- fluidità = media di ‖ω‖ (norma velocità angolare) — bassa = volo liscio;
+- meccanismo = media di ‖aₜ − aₜ₋₁‖ — la grandezza penalizzata, prova che lo shaping agisce sui
+  comandi (non misura di fluidità: sarebbe circolare);
+- tempo di assestamento = primo istante dopo cui la distanza resta entro ±0.10 m dal valore finale.
+Classificazione del comportamento: crash; spin (avvitamento, ‖ω‖ finale ≥ 1.0 rad/s, il drone resta
+in volo ma ruota su sé stesso); stable. Le metriche continue si aggregano solo sugli episodi stabili.
+Motivo della scelta continua: il task non produce hover di precisione (il reward nativo 2−dist⁴ è
+piatto vicino al target), quindi una soglia secca di "arrivato" sarebbe arbitraria e scarterebbe
+modelli; le metriche continue confrontano i λ sui numeri reali. Valutazione senza calcio di velocità
+(stressore specifico della DQ1); partenza disturbata in posizione e inclinazione, seeded e identica
+per tutti i modelli.
+
+### Problemi riscontrati e risolti (catena di debug)
+- Normalizzazione in valutazione: la prima evaluate.py reimplementava a mano la normalizzazione,
+  con un bias sistematico sulla posizione. Corretto facendo girare il modello dentro il VecNormalize
+  ricaricato dal training (stesso oggetto, stessa scala delle osservazioni).
+- Stato post-reset: il VecEnv auto-resetta a fine episodio; leggere lo stato dopo l'ultimo step
+  restituiva lo stato del nuovo episodio (falso "vicino al target"). Corretto registrando lo stato
+  PRIMA di ogni step.
+- Geometria del task: il drone parte nativamente a terra (z≈0.11); il target è [0,0,1]. Verificato
+  che i modelli salgono e mantengono quota (non era un problema di reward).
+
+### Riaddestramento mirato
+Verifica dei modelli salvati (ricarico + ev. su episodi): 2 run (lam0.5 seed2, lam0.8 seed2) erano
+caduti in un minimo "a terra" GIÀ in training (evaluations.npz ~258 invece di ~470); 1 run
+(lam0.5 seed0) aveva il final_model degradato da uno snapshot finale rumoroso (best volava).
+Decisione: riaddestrare solo i run problematici con seed sostitutivi (3, 4), non l'intero batch
+(spreco) né valutare best_model (cherry-picking). Seed validi finali — lam0.1: {0,1,2};
+lam0.5: {1,3,4}; lam0.8: {0,1,3}. La non-uniformità dei seed è dichiarata.
+Lezione: la curva di training (npz) e il modello salvato vanno verificati entrambi; valuto sempre
+ricaricando il modello, non fidandomi solo della curva.
+
+### Risultato (valutazione: 100 episodi/run, eval-seed 0, severità 1, no kick)
+Ripartizione dei comportamenti per λ (3 seed ciascuno):
+- λ=0.1: 3/3 stable. Hover fluido (‖ω‖≈0.002), assestamento ~0.23–0.33 m.
+- λ=0.5: 1/3 stable (seed1, il più preciso: assestamento 0.12 m), 2/3 spin.
+- λ=0.8: 2/3 stable (assestamento ~0.26–0.30 m, ‖ω‖≈0.003–0.017), 1/3 spin.
+
+Lettura: il reward shaping NON ha effetto monotòno. Senza/poca penalità il drone converge sempre a
+un hover stabile. Con penalità moderata-alta l'ottimizzazione apre soluzioni qualitativamente diverse
+(hover preciso e attivo, hover "pigro" a comandi quasi costanti, avvitamento) e quale emerge dipende
+dal seed; l'avvitamento è più frequente a penalità intermedia (λ=0.5). Interpretazione: la penalità
+rende costose le micro-correzioni necessarie all'hover; in alcuni training il drone trova un regime
+rotante a comandi quasi costanti che le evita — un minimo non desiderato della reward shaped (analogo
+all'instabilità da learning rate troppo alto). Con 3 seed il fenomeno è mostrato come osservazione
+qualitativa seed-dipendente, non quantificato come frequenza esatta (limite dichiarato).
+
+## [26-06-2026] DQ2 completata — valutazione, notebook e figure
+
+Chiusa la seconda domanda. La valutazione dei 9 modelli shaped (3 seed per λ ∈ {0.1, 0.5, 0.8})
+con metriche continue è stata aggregata in results/tables/dq2_summary.csv. Creato il notebook
+notebooks/dq2_reward_shaping.ipynb (stessa struttura del notebook DQ1: provenienza dati, definizione
+metriche, figure, verdetto), che esporta due figure in results/figures/ — dq2_behavior_by_lambda.png
+(ripartizione stabile/avvitamento per λ, conteggio dei semi) e dq2_quality_stable.png (precisione vs
+fluidità sui soli run stabili) — e la tabella dq2_behavior_table.csv.
+
+Risultato: l'effetto della penalità non è monotòno. A penalità lieve il drone è sempre stabile; a
+penalità media-alta compaiono soluzioni diverse (hover preciso, hover pigro, avvitamento) in modo
+dipendente dal seme, con l'avvitamento più frequente a λ=0.5. Il "prezzo" della fluidità non è il
+tempo (nessun trend chiaro), ma la precisione (assestamento più lontano a λ alto) e il rischio di
+avvitamento. Interpretazione: la penalità rende costose le micro-correzioni dell'hover; oltre soglia
+alcuni training trovano un regime rotante che le evita, un minimo non desiderato della reward shaped.
+
+Aggiornati README (sezione Domanda 2, struttura repo) e questo diario. Restano da produrre le clip
+video dimostrative (hover stabile vs avvitamento) e la Domanda 3 (turbolenze).

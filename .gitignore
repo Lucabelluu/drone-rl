@@ -33,5 +33,6 @@ experiments/**/best_model.zip
 experiments/**/final_model.zip
 experiments/**/vecnormalize.pkl
 
-experiments/dq1/*_log.txt
+experiments/**/*_log.txt
+experiments/**/training_log.txt
 NOTE_ORALE.md

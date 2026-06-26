@@ -4,13 +4,19 @@
   "episodes": 100,
   "eval_seed": 0,
   "severity": 3.0,
+  "kick": true,
   "crash_rate_pct": 43.0,
-  "counts": {
-    "crash": 43,
-    "timeout": 57
-  },
+  "spin_rate_pct": 0.0,
+  "stable_rate_pct": 57.0,
   "mean_return": 285.8881,
   "mean_length": 144.45,
+  "settle_dist_median_m": 0.105,
+  "settle_time_median_s": 1.4,
+  "fluidity_omega_mean": 0.629932,
+  "mech_dact_mean": 2.065034,
+  "window_sec": 1.0,
+  "omega_spin_rad_s": 1.0,
+  "settle_tol_m": 0.1,
   "init_randomization": {
     "xy": 0.75,
     "tilt": 0.3,

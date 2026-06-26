@@ -64,22 +64,28 @@ Il file `requirements.txt` riporta le versioni esatte dei pacchetti con cui il p
 drone-rl/
 ├── src/
 │   ├── envs/
-│   │   └── hover_terminal.py     # variante dell'ambiente con schianto = stato terminale
-│   ├── train.py                  # addestramento di una singola policy (1 algoritmo, 1 seed)
-│   └── evaluate.py               # valutazione: Crash Rate sotto perturbazioni graduate
+│   │   ├── hover_terminal.py     # ambiente di hovering in cui lo schianto termina l'episodio
+│   │   └── hover_shaped.py       # ambiente di hovering con penalità che premia comandi regolari
+│   ├── train.py                  # addestra una singola policy (un algoritmo, un seed)
+│   └── evaluate.py               # valuta una policy: robustezza (DQ1) e qualità del volo (DQ2)
 ├── scripts/
 │   ├── run_dq1.sh                # addestra i 6 modelli della Domanda 1
-│   ├── run_eval_dq1.sh           # valutazione a condizioni nominali
-│   ├── run_eval_sweep_dq1.sh     # valutazione su 5 livelli di severità
-│   └── aggregate_eval.py         # raccoglie i riepiloghi JSON in un unico CSV
+│   ├── run_eval_dq1.sh           # valuta i modelli della Domanda 1 a condizioni nominali
+│   ├── run_eval_sweep_dq1.sh     # valuta i modelli della Domanda 1 su 5 livelli di severità
+│   ├── aggregate_eval.py         # riunisce i risultati della Domanda 1 in un unico CSV
+│   ├── run_dq2.sh                # addestra i 9 modelli della Domanda 2
+│   ├── run_eval_dq2.sh           # valuta i modelli della Domanda 2
+│   └── aggregate_dq2.py          # riunisce i risultati della Domanda 2 in un unico CSV
 ├── experiments/
-│   └── dq1/                      # artefatti dei run e risultati aggregati della Domanda 1
+│   ├── dq1/                      # modelli e risultati della Domanda 1
+│   └── dq2/                      # modelli e risultati della Domanda 2
 ├── notebooks/
-│   └── dq1_confronto_ppo_sac.ipynb   # analisi dei risultati della Domanda 1
+│   ├── dq1_confronto_ppo_sac.ipynb    # analisi e figure della Domanda 1
+│   └── dq2_reward_shaping.ipynb       # analisi e figure della Domanda 2
 ├── results/
 │   ├── figures/                  # figure finali (.png)
 │   └── tables/                   # tabelle finali (.csv)
-├── assets/                       # logo, proposta di progetto, immagini di calibrazione e setup
+├── assets/                       # logo, proposta di progetto, immagini di setup
 ├── requirements.txt
 ├── DIARIO.md                     # diario di progetto: decisioni e motivazioni in ordine cronologico
 └── README.md
@@ -139,11 +145,73 @@ Le figure e le tabelle finali sono già incluse in `results/`. Per rigenerare so
 
 ![Crash Rate in funzione della severità](results/figures/dq1_crashrate_vs_severity.png)
 
+![Ritorno in funzione della severità](results/figures/dq1_return_vs_severity.png)
+
 ![Curve di convergenza](results/figures/dq1_convergence.png)
 
-SAC presenta un Crash Rate inferiore a ogni livello di severità, con bande tra semi che non si sovrappongono a quelle di PPO (a severità 3, circa 8% contro 48%) e una variabilità tra semi più contenuta. Sul fronte della convergenza i due algoritmi raggiungono lo stesso livello di prestazione a regime (ritorno ~470), ma SAC vi arriva prima — supera la soglia di ricompensa di 400 a circa 60.000 passi contro i circa 110.000 di PPO — e con una fase di salita più stabile tra semi.
+SAC presenta un Crash Rate inferiore a ogni livello di severità, con bande tra semi che non si sovrappongono a quelle di PPO (a severità 3, circa 8% contro 48%) e una variabilità tra semi più contenuta. La robustezza si conferma su un secondo asse, indipendente dal Crash Rate: a parità di severità SAC mantiene ritorni di valutazione nettamente più alti (a severità 4 circa 300 contro 123, a severità 5 circa 173 contro 75), cioè non solo schianta meno, ma vola meglio quando sopravvive. Sul fronte della convergenza i due algoritmi raggiungono lo stesso livello di prestazione a regime (ritorno ~470), ma SAC vi arriva prima — supera la soglia di ricompensa di 400 a circa 60.000 passi contro i circa 110.000 di PPO — e con una fase di salita più stabile tra semi.
 
 La risposta alla domanda è affermativa su entrambi gli assi considerati: l'algoritmo off-policy ottiene un Crash Rate inferiore e una convergenza più stabile. Il vantaggio si colloca nella velocità di convergenza, nella stabilità e nella robustezza, non nella prestazione finale a regime, che è equivalente per le due famiglie. SAC è quindi il modello adottato come base per la Domanda 2.
+
+
+## Domanda 2 — Reward shaping per la fluidità del volo
+
+### Impostazione
+
+La seconda domanda applica il *reward shaping* all'algoritmo vincitore della prima (SAC) per ottenere un volo più fluido. Alla ricompensa nativa si aggiunge una penalità quadratica sulle variazioni del comando ai motori, `−λ·‖aₜ − aₜ₋₁‖²`, dove `aₜ` è il comando ai quattro motori e `λ` ne pesa l'intensità: variazioni brusche di potenza vengono scoraggiate, favorendo comandi regolari. La penalità è realizzata dalla variante `HoverAviaryShaped` (in `src/envs/`), che estende l'ambiente con terminazione corretto della Domanda 1; con `λ=0` il comportamento coincide con quello della Domanda 1, garantendo un confronto pulito.
+
+Lo sweep copre una penalità lieve (`λ=0.1`), media (`λ=0.5`) e forte (`λ=0.8`), con tre semi per valore e budget identico a quello della Domanda 1. Il valore `λ=1.0` è stato escluso in fase di smoke test perché collassa l'apprendimento: con una penalità così alta il drone preferisce non muovere i motori e cade.
+
+La valutazione classifica ogni episodio in tre comportamenti mutuamente esclusivi, osservando l'ultimo secondo di volo: **stabile** (il drone si mantiene fermo entro una zona attorno al target, con velocità angolare prossima a zero), **avvitamento** (il drone resta in volo ma ruota su sé stesso, con velocità angolare oltre 1 rad/s, invece di stabilizzarsi) e **schianto** (uscita dall'inviluppo di volo sicuro). Sui soli episodi stabili si misurano grandezze continue: la distanza di assestamento dal target, la fluidità (media della norma della velocità angolare, indipendente dalla quantità penalizzata per evitare circolarità nella misura) e il tempo di assestamento. La scelta di metriche continue, anziché di una soglia binaria di "target raggiunto", è motivata dalla forma della ricompensa nativa, piatta in prossimità del target, che non spinge il drone sull'ultimo decimetro e renderebbe arbitraria una soglia secca.
+
+### Riproduzione
+
+Dalla radice del progetto, con l'ambiente attivo:
+
+```bash
+conda activate drone-rl
+
+# 1. Addestramento dei 9 modelli shaped (~5 h su MacBook Air M5: ~32 min/run)
+caffeinate -i bash scripts/run_dq2.sh
+
+# 2. Valutazione della qualità del volo dei 9 modelli (pochi minuti)
+bash scripts/run_eval_dq2.sh
+
+# 3. Aggregazione dei riepiloghi in un unico CSV
+python scripts/aggregate_dq2.py
+
+# 4. Esecuzione del notebook di analisi: rigenera ed esporta figure e tabelle in results/
+jupyter nbconvert --to notebook --execute --inplace notebooks/dq2_reward_shaping.ipynb
+```
+
+Le figure e le tabelle finali sono già incluse in `results/`. Per rigenerare solo le figure è sufficiente il passo 4, che legge il file già versionato (`results/tables/dq2_summary.csv`).
+
+### Risultati
+
+![Comportamento per intensità della penalità](results/figures/dq2_behavior_by_lambda.png)
+
+![Qualità del volo sui run stabili](results/figures/dq2_quality_stable.png)
+
+L'effetto della penalità non è monotòno. Senza penalità o con penalità lieve (`λ ≤ 0.1`) il drone converge in modo affidabile a un volo stabile e liscio. Con penalità media o forte la penalità apre soluzioni qualitativamente diverse — hover preciso e attivo, hover "pigro" a comandi quasi costanti, oppure avvitamento — e quale emerga dipende dal seme di addestramento; l'avvitamento è più frequente a penalità intermedia (`λ=0.5`). Quando il drone si stabilizza, il volo è sempre fluido: la seconda figura mostra che i run stabili hanno tutti velocità angolare bassa, con un compromesso tra precisione e fluidità (il run stabile a `λ=0.5` è il più vicino al target ma il meno liscio; quelli a `λ` alto sono molto lisci ma si assestano più lontano).
+
+La risposta alla domanda riformula la sua premessa. La penalità non si paga principalmente in tempo per raggiungere il target — che non mostra una dipendenza chiara da `λ` — ma in **precisione** e nel **rischio di un comportamento di avvitamento**. Mantenere l'hover richiede continue micro-correzioni della potenza dei motori; la penalità le rende costose, e oltre una certa intensità alcuni addestramenti trovano un regime di rotazione che le evita, un minimo non desiderato della ricompensa modificata. Il fenomeno è analogo all'instabilità prodotta da un tasso di apprendimento troppo elevato: oltre una soglia, l'azione che dovrebbe stabilizzare introduce essa stessa instabilità. Con tre semi per `λ` il comportamento è documentato come fenomeno qualitativo dipendente dal seme, non quantificato come frequenza statistica precisa.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Crediti e riferimenti
 

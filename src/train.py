@@ -26,6 +26,7 @@ from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 from gym_pybullet_drones.utils.enums import ObservationType, ActionType
 
 from envs.hover_terminal import HoverAviaryTerminal
+from envs.hover_shaped import HoverAviaryShaped
 
 # Punti voluti sulla curva di apprendimento, a prescindere dal budget.
 N_EVAL_POINTS = 50
@@ -48,6 +49,11 @@ def parse_args():
                    help="Cartella base dei risultati.")
     p.add_argument("--overwrite", action="store_true",
                    help="Sovrascrive il run se la cartella esiste già.")
+    # DQ2: reward shaping. Senza --shaped il comportamento è identico alla DQ1 (HoverAviaryTerminal).
+    p.add_argument("--shaped", action="store_true",
+                   help="Usa HoverAviaryShaped (reward − lambda*||a_t − a_{t-1}||^2).")
+    p.add_argument("--lambda", dest="shaping_lambda", type=float, default=0.0,
+                   help="Peso lambda della penalità di shaping (usato solo con --shaped).")
     return p.parse_args()
 
 
@@ -84,8 +90,13 @@ def main():
     # 1) Riproducibilità globale (Python, NumPy, PyTorch).
     set_random_seed(args.seed)
 
-    # 2) Cartella del run, nome deterministico {algo}_seed{N}.
-    run_dir = Path(args.output_dir) / f"{args.algo}_seed{args.seed}"
+    # 2) Cartella del run, nome deterministico. Per i run shaped (DQ2) il lambda entra nel nome,
+    #    cosi' condizioni con lambda diverso non collidono e il path e' auto-descrittivo.
+    if args.shaped:
+        run_name = f"{args.algo}_lam{args.shaping_lambda}_seed{args.seed}"
+    else:
+        run_name = f"{args.algo}_seed{args.seed}"
+    run_dir = Path(args.output_dir) / run_name
     if run_dir.exists() and not args.overwrite:
         raise SystemExit(f"[STOP] {run_dir} esiste già. Usa --overwrite per rifarlo.")
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -97,6 +108,8 @@ def main():
         "timesteps": args.timesteps,
         "obs": "kin",
         "act": "rpm",
+        "shaped": args.shaped,
+        "shaping_lambda": args.shaping_lambda,
         "sb3_version": stable_baselines3.__version__,
         "git_commit": get_git_commit(),
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -111,7 +124,14 @@ def main():
     # L'osservazione KIN è grezza e con limiti infiniti (verificato in BaseRLAviary): SAC diverge
     # senza normalizzazione. VecNormalize su ENTRAMBI = stesso pre-processing, confronto equo.
     # kin = stato cinematico (pos/assetto/velocità); rpm = azione = giri dei 4 motori
-    train_env = make_vec_env(HoverAviaryTerminal, env_kwargs=env_kwargs, n_envs=1, seed=args.seed)
+    # DQ2: l'ambiente di TRAINING applica lo shaping (se --shaped); quello di VALUTAZIONE resta
+    # nativo (vedi sotto), così la curva di controllo riflette l'obiettivo vero ed è confrontabile
+    # tra i diversi lambda.
+    train_kwargs = dict(env_kwargs)
+    if args.shaped:
+        train_kwargs["shaping_lambda"] = args.shaping_lambda
+    train_cls = HoverAviaryShaped if args.shaped else HoverAviaryTerminal
+    train_env = make_vec_env(train_cls, env_kwargs=train_kwargs, n_envs=1, seed=args.seed)
     # norm_reward=False: tengo il reward grezzo (0-2) per ritorni interpretabili e comparabili (~480 max)
     train_env = VecNormalize(train_env, norm_obs=True, norm_reward=False)
     eval_env = make_vec_env(HoverAviaryTerminal, env_kwargs=env_kwargs, n_envs=1, seed=args.seed + 1000)

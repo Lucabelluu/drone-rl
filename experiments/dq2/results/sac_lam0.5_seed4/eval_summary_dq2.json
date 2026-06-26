@@ -1,0 +1,24 @@
+{
+  "algo": "sac",
+  "model": "final",
+  "episodes": 100,
+  "eval_seed": 0,
+  "severity": 1.0,
+  "kick": false,
+  "crash_rate_pct": 0.0,
+  "spin_rate_pct": 100.0,
+  "stable_rate_pct": 0.0,
+  "settle_dist_median_m": null,
+  "settle_time_median_s": null,
+  "fluidity_omega_mean": null,
+  "mech_dact_mean": null,
+  "window_sec": 1.0,
+  "omega_spin_rad_s": 1.0,
+  "settle_tol_m": 0.1,
+  "init_randomization": {
+    "xy": 0.25,
+    "tilt": 0.1,
+    "linvel": 0.0,
+    "angvel": 0.0
+  }
+}
