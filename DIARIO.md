@@ -921,3 +921,31 @@ alcuni training trovano un regime rotante che le evita, un minimo non desiderato
 
 Aggiornati README (sezione Domanda 2, struttura repo) e questo diario. Restano da produrre le clip
 video dimostrative (hover stabile vs avvitamento) e la Domanda 3 (turbolenze).
+
+## [01-07-2026] DQ3 — ambiente del vento (HoverAviaryWind) implementato e validato
+
+Creato src/envs/hover_wind.py: sottoclasse di HoverAviaryShaped (DQ2) che aggiunge un vento
+orizzontale stocastico. Ereditando da Shaped, l'ambiente porta con sé il reward shaping (λ) e
+serve sia ad addestrare la Policy B con domain randomization (shaping λ=0.1 + vento in training),
+sia a stressare la Policy A (allenata in aria calma) in valutazione: un solo file per entrambi.
+
+Modello di vento: due processi di Ornstein-Uhlenbeck indipendenti su Fx e Fy (turbolenza
+stocastica: variano sia intensità sia direzione nel piano orizzontale), parametrizzati in modo
+interpretabile — wind_mag = deviazione standard stazionaria della forza in frazione del peso del
+drone (self.GRAVITY = G·M = 0.2646 N, verificato); wind_tau = tempo di correlazione della raffica.
+Da cui sigma = wind_mag·GRAVITY·sqrt(2/tau), integrato al passo di fisica (1/PYB_FREQ). Fz=0: il
+vento è orizzontale, dove serve il controllo d'assetto. Il vento NON è osservato dalla policy
+(_computeObs non toccato): robustezza reattiva. Vento riseedato per episodio (wind_seed + indice
+episodio) → domain randomization in training, ma sequenza riproducibile e IDENTICA tra modelli in
+valutazione (confronto A-vs-B equo).
+
+Punto tecnico critico: la forza è applicata in WORLD_FRAME al baricentro passando come punto di
+applicazione la POSIZIONE MONDO del drone (non [0,0,0], che darebbe un braccio enorme rispetto
+all'origine e quindi una coppia parassita). Verificato con smoke test (azione di hover costante,
+nessun controllo): a wind_mag>0 il drone deriva in xy ma roll/pitch restano nulli → spinta
+orizzontale pulita, nessuna coppia spuria. Le forze del vento scalano correttamente con wind_mag.
+Osservazione per la calibrazione: massa 0.027 kg + autorità ±5% RPM → il range utile di wind_mag
+sarà basso (~0.05–0.25), da confermare con lo spike sulla Policy A.
+
+Prossimo: calibrazione dell'intensità (spike su Policy A, λ=0.1 aria calma) per fissare la griglia
+di wind_mag della curva di robustezza.
