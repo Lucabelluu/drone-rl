@@ -84,7 +84,8 @@ drone-rl/
 │   └── dq2_reward_shaping.ipynb       # analisi e figure della Domanda 2
 ├── results/
 │   ├── figures/                  # figure finali (.png)
-│   └── tables/                   # tabelle finali (.csv)
+│   ├── tables/                   # tabelle finali (.csv)
+│   └── videos/                   # clip dimostrative del volo (.mp4)
 ├── assets/                       # logo, proposta di progetto, immagini di setup
 ├── requirements.txt
 ├── DIARIO.md                     # diario di progetto: decisioni e motivazioni in ordine cronologico
@@ -153,6 +154,8 @@ SAC presenta un Crash Rate inferiore a ogni livello di severità, con bande tra 
 
 La risposta alla domanda è affermativa su entrambi gli assi considerati: l'algoritmo off-policy ottiene un Crash Rate inferiore e una convergenza più stabile. Il vantaggio si colloca nella velocità di convergenza, nella stabilità e nella robustezza, non nella prestazione finale a regime, che è equivalente per le due famiglie. SAC è quindi il modello adottato come base per la Domanda 2.
 
+Una clip dimostrativa in `results/videos/` (`dq1_sac_seed0_sev3_kick.mp4`) mostra SAC che assorbe un impulso di velocità iniziale e recupera l'assetto fino all'hovering; la pallina rossa segna il target.
+
 
 ## Domanda 2 — Reward shaping per la fluidità del volo
 
@@ -195,6 +198,8 @@ Le figure e le tabelle finali sono già incluse in `results/`. Per rigenerare so
 L'effetto della penalità non è monotòno. Senza penalità o con penalità lieve (`λ ≤ 0.1`) il drone converge in modo affidabile a un volo stabile e liscio. Con penalità media o forte la penalità apre soluzioni qualitativamente diverse — hover preciso e attivo, hover "pigro" a comandi quasi costanti, oppure avvitamento — e quale emerga dipende dal seme di addestramento; l'avvitamento è più frequente a penalità intermedia (`λ=0.5`). Quando il drone si stabilizza, il volo è sempre fluido: la seconda figura mostra che i run stabili hanno tutti velocità angolare bassa, con un compromesso tra precisione e fluidità (il run stabile a `λ=0.5` è il più vicino al target ma il meno liscio; quelli a `λ` alto sono molto lisci ma si assestano più lontano).
 
 La risposta alla domanda riformula la sua premessa. La penalità non si paga principalmente in tempo per raggiungere il target — che non mostra una dipendenza chiara da `λ` — ma in **precisione** e nel **rischio di un comportamento di avvitamento**. Mantenere l'hover richiede continue micro-correzioni della potenza dei motori; la penalità le rende costose, e oltre una certa intensità alcuni addestramenti trovano un regime di rotazione che le evita, un minimo non desiderato della ricompensa modificata. Il fenomeno è analogo all'instabilità prodotta da un tasso di apprendimento troppo elevato: oltre una soglia, l'azione che dovrebbe stabilizzare introduce essa stessa instabilità. Con tre semi per `λ` il comportamento è documentato come fenomeno qualitativo dipendente dal seme, non quantificato come frequenza statistica precisa.
+
+Le clip in `results/videos/` mostrano i comportamenti osservati, tutti a partire dalla stessa condizione iniziale (la pallina rossa segna il target [0,0,1]): hover stabile e vicino al target a penalità lieve (`dq2_hover_sac_lam0.1_seed0_sev1.mp4`), hover preciso ma meno liscio a penalità media (`dq2_hover_preciso_sac_lam0.5_seed1_sev1.mp4`), hover "pigro" a penalità forte (`dq2_hover_sac_lam0.8_seed1_sev1.mp4`) e il regime di avvitamento in cui il drone ruota su sé stesso senza stabilizzarsi (`dq2_avvitamento_sac_lam0.5_seed3_sev1.mp4`, `dq2_avvitamento_sac_lam0.8_seed0_sev1.mp4`).
 
 
 
