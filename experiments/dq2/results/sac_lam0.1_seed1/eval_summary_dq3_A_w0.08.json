@@ -1,0 +1,28 @@
+{
+  "algo": "sac",
+  "model": "final",
+  "episodes": 100,
+  "eval_seed": 0,
+  "severity": 1.0,
+  "kick": false,
+  "wind_mag": 0.08,
+  "wind_tau": 0.8,
+  "crash_rate_pct": 52.0,
+  "spin_rate_pct": 24.0,
+  "stable_rate_pct": 24.0,
+  "mean_return": 324.1427,
+  "mean_length": 189.15,
+  "settle_dist_median_m": 0.445,
+  "settle_time_median_s": 7.2,
+  "fluidity_omega_mean": 0.573789,
+  "mech_dact_mean": 0.207491,
+  "window_sec": 1.0,
+  "omega_spin_rad_s": 1.0,
+  "settle_tol_m": 0.1,
+  "init_randomization": {
+    "xy": 0.25,
+    "tilt": 0.1,
+    "linvel": 0.0,
+    "angvel": 0.0
+  }
+}

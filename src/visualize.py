@@ -32,6 +32,7 @@ from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 
 from gym_pybullet_drones.utils.enums import ObservationType, ActionType
 from envs.hover_terminal import HoverAviaryTerminal, is_crash
+from envs.hover_wind import HoverAviaryWind
 
 ALGOS = {"ppo": PPO, "sac": SAC}
 TARGET_POS = np.array([0.0, 0.0, 1.0])
@@ -61,6 +62,10 @@ def parse_args():
                     help="Aggiunge il calcio di velocità iniziale (stressore DQ1). Off per le clip DQ2.")
     ap.add_argument("--record", action="store_true", help="Registra un MP4 (richiede --out).")
     ap.add_argument("--out", default="results/videos/clip.mp4", help="Percorso MP4 di output.")
+    ap.add_argument("--wind-mag", type=float, default=0.0,
+                    help="Vento in valutazione (frazione del peso). >0 attiva HoverAviaryWind (DQ3).")
+    ap.add_argument("--wind-tau", type=float, default=0.8,
+                    help="Tempo di correlazione della raffica [s] (DQ3).")
     return ap.parse_args()
 
 
@@ -116,9 +121,16 @@ def main():
     if not stats.exists():
         raise SystemExit(f"[STOP] vecnormalize.pkl non trovato in {run_dir}")
     with contextlib.redirect_stdout(io.StringIO()):
-        venv = DummyVecEnv([lambda: HoverAviaryTerminal(
-            obs=ObservationType("kin"), act=ActionType("rpm"),
-            initial_xyzs=xyz, initial_rpys=rpy, gui=False)])
+        if args.wind_mag > 0.0:
+            venv = DummyVecEnv([lambda: HoverAviaryWind(
+                obs=ObservationType("kin"), act=ActionType("rpm"),
+                initial_xyzs=xyz, initial_rpys=rpy, gui=False,
+                wind_mag=args.wind_mag, wind_tau=args.wind_tau,
+                wind_seed=1000 * args.episode_seed)])
+        else:
+            venv = DummyVecEnv([lambda: HoverAviaryTerminal(
+                obs=ObservationType("kin"), act=ActionType("rpm"),
+                initial_xyzs=xyz, initial_rpys=rpy, gui=False)])
         venv = VecNormalize.load(str(stats), venv)
     venv.training = False
     venv.norm_reward = False
@@ -139,17 +151,19 @@ def main():
                              physicsClientId=inner.CLIENT)
 
     frames = []
-    crashed = False
+    ep_len = 0
     done = [False]
     while not done[0]:
         if args.record:
             frames.append(grab_frame(inner.CLIENT))
-        # stato PRIMA dello step: cattura la condizione di schianto prima del reset del VecEnv
-        if is_crash(inner._getDroneStateVector(0)):
-            crashed = True
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = venv.step(action)
+        ep_len += 1
 
+    # Esito coerente con evaluate.py: un episodio interrotto prima del 95% della durata massima
+    # è uno schianto (è uscito dall'inviluppo di volo); altrimenti è sopravvivenza (timeout).
+    max_len = int(inner.EPISODE_LEN_SEC * ctrl_freq)
+    crashed = ep_len < int(0.95 * max_len)
     reason = "crash" if crashed else "timeout"
     venv.close()
 

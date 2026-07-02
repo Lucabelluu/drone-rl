@@ -949,3 +949,87 @@ sarà basso (~0.05–0.25), da confermare con lo spike sulla Policy A.
 
 Prossimo: calibrazione dell'intensità (spike su Policy A, λ=0.1 aria calma) per fissare la griglia
 di wind_mag della curva di robustezza.
+
+## [01-07-2026] DQ3 — innesto del vento in evaluate.py e calibrazione dell'intensità
+
+evaluate.py esteso per la valutazione sotto vento: due argomenti --wind-mag e --wind-tau; con
+--wind-mag>0 l'ambiente di valutazione diventa HoverAviaryWind, altrimenti resta HoverAviaryTerminal
+(DQ1/DQ2 invariati). Il wind_seed è derivato da (eval-seed, indice episodio): episodi con venti
+diversi ma IDENTICI tra modelli valutati con lo stesso eval-seed → confronto A-vs-B equo. Verificato
+che a wind_mag=0 i risultati coincidono con la DQ2 (crash 0%, stable 100%, settle_dist 0.30 m): la
+modifica non altera le domande già chiuse.
+
+Calibrazione dell'intensità (spike zero-shot sulla Policy A = SAC λ=0.1 seed0, mai allenata col vento,
+30 episodi per punto): wind_mag 0.01 → crash 0%; 0.02 → 0%; 0.05 → crash 10% + spin 20%; 0.15 →
+crash 100%. La curva è graduale (non un salto secco), il che conferma che il comportamento è fisico e
+non un artefatto di misura. La norma della velocità angolare in hover cresce col vento (0.068 → 0.152
+→ 0.432 rad/s): firma attesa dello sforzo di controllo crescente. Sotto vento la Policy A mostra anche
+avvitamento (spin), lo stesso modo di fallimento emerso in DQ2.
+
+Il ginocchio della robustezza di A è tra wind_mag 0.02 e 0.15. Griglia scelta per la curva di
+robustezza A-vs-B: wind_mag ∈ {0.02, 0.05, 0.08, 0.12, 0.15} (ancoraggio facile, zona di transizione,
+vento pesante). Range basso coerente con massa 0.027 kg e autorità di comando ±5% RPM.
+
+Vento di TRAINING per la Policy B: wind_mag=0.08, scelto nel mezzo della zona di transizione — forte
+abbastanza da costringere B a imparare a contrastarlo, non così forte da impedire l'apprendimento
+dell'hover. Testare poi anche a 0.12 e 0.15 (più forti del training) misura la generalizzazione
+out-of-distribution richiesta dalla DQ3. Da validare con smoke di B (1 seed, ~50k) prima del batch.
+
+Prossimo: ritocco a train.py per accettare il vento in training; smoke della Policy B a wind_mag=0.08.
+
+## [02-07-2026] DQ3 — risultato del confronto A-vs-B (curva di robustezza al vento)
+
+Valutati i 6 modelli (Policy A = SAC λ=0.1 aria calma, dalla DQ2; Policy B = SAC λ=0.1 + vento
+wind_mag=0.08 in training) su 5 livelli di vento {0.02, 0.05, 0.08, 0.12, 0.15}, 100 episodi per
+punto, condizioni seeded identiche per A e B (stesso vento per costruzione). Aggregato in
+results/tables/dq3_robustness.csv (30 righe: 2 policy × 3 seed × 5 venti).
+
+Crash Rate medio (3 seed), A vs B:
+  wind 0.02:  A 0%    | B 0%
+  wind 0.05:  A ~8%   | B 0%
+  wind 0.08:  A ~52%  | B 0%      <- 0.08 = vento di training di B (in-distribution)
+  wind 0.12:  A ~92%  | B ~6%     <- out-of-distribution per B
+  wind 0.15:  A ~98%  | B ~28%    <- out-of-distribution per B
+
+Lettura: la robustezza zero-shot della policy fluida NON basta — la Policy A perde l'assetto in modo
+sistematico già a vento moderato (52% a 0.08) e collassa a vento forte (~98% a 0.15). Iniettare il
+vento in training (domain randomization) rende la policy robusta: B azzera il Crash Rate fino al suo
+vento di training e generalizza a venti più forti mai visti (crash ~6% e ~28% a 0.12 e 0.15, contro
+~92% e ~98% di A). Robustezza confermata su un secondo asse indipendente: a 0.12 il ritorno medio di
+B è ~463 contro ~192 di A (B non solo schianta meno, vola meglio quando sopravvive).
+
+Limite dichiarato: fuori distribuzione lo spin (avvitamento) di B risale (~26% medio a 0.15), lo
+stesso modo di fallimento emerso in DQ2. B è molto più robusta ma non invincibile oltre il vento di
+training; crash e spin crescono monotonicamente man mano che il vento si allontana da 0.08.
+
+Risposta DQ3: la sola ottimizzazione per la fluidità non conferisce robustezza al vento; il domain
+randomization in training è necessario e sufficiente a ottenerla, con generalizzazione out-of-
+distribution e un residuo di avvitamento come unico limite fuori distribuzione.
+
+Addestramento DQ3: 3 run (Policy B, seed 0/1/2), SAC λ=0.1 + wind_mag 0.08, 500k passi, ~31-33
+min/run su M5. Policy A riusata dalla DQ2 (nessun training aggiuntivo). Fase di training DQ3 conclusa.
+
+## [02-07-2026] DQ3 chiusa — notebook, figure, README
+
+Prodotto il notebook notebooks/dq3_robustezza_vento.ipynb (stessa struttura di dq1/dq2: provenienza
+dati, metriche, figure, verdetto; sola lettura di results/tables/dq3_robustness.csv, nessun
+addestramento). Esporta due figure in results/figures/ — dq3_crashrate_vs_wind.png (curva di
+robustezza Crash Rate vs intensità del vento, con linea al vento di training 0.08) e
+dq3_return_vs_wind.png (ritorno vs vento, asse indipendente) — e due tabelle in results/tables/
+(dq3_robustness_summary.csv completa, dq3_crashrate_table.csv sintetica). Restart & Run All pulito.
+
+Prodotte due clip dimostrative in results/videos/ allo stesso vento (wind_mag=0.12, out-of-distribution
+per B) e stessa condizione iniziale: dq3_A_nowind_train_wind0.12_seed0.mp4 (Policy A che perde
+l'assetto) e dq3_B_windtrain_wind0.12_seed0.mp4 (Policy B che regge l'intero episodio). Per generarle
+è stato aggiunto a visualize.py il supporto al vento (flag --wind-mag/--wind-tau, coerente con
+evaluate.py) e corretta la classificazione dell'esito (crash vs timeout basata sulla durata episodio,
+allineata a evaluate.py: prima un flag fragile stampava "timeout" anche sugli schianti).
+
+Aggiornato il README con la sezione Domanda 3 (impostazione, riproduzione, risultati) e la struttura
+della repository (nuovi file dq3 in src/envs, scripts, experiments, notebooks). Con questo la Domanda 3
+è chiusa: le tre domande di ricerca hanno risposta, dati, figure e verdetto.
+
+Verdetto DQ3: la robustezza zero-shot del modello fluido NON basta (Policy A ~52% crash a 0.08, ~98%
+a 0.15); il domain randomization in training è necessario e sufficiente (Policy B 0% fino a 0.08, ~6%
+e ~28% a 0.12 e 0.15), con generalizzazione out-of-distribution e un residuo di avvitamento (~26% spin
+a 0.15) come unico limite fuori distribuzione.

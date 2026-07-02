@@ -47,6 +47,7 @@ from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 
 from gym_pybullet_drones.utils.enums import ObservationType, ActionType
 from envs.hover_terminal import HoverAviaryTerminal, is_crash
+from envs.hover_wind import HoverAviaryWind
 
 ALGOS = {"ppo": PPO, "sac": SAC}
 TARGET_POS = np.array([0.0, 0.0, 1.0])
@@ -81,6 +82,10 @@ def parse_args():
                     help="Aggiunge il calcio di velocità lineare/angolare a t=0 (stressore DQ1).")
     ap.add_argument("--tag", default="",
                     help="Suffisso file di output (es. _dq2) per non sovrascrivere.")
+    ap.add_argument("--wind-mag", type=float, default=0.0,
+                    help="Intensità del vento (frazione del peso). >0 attiva HoverAviaryWind (DQ3).")
+    ap.add_argument("--wind-tau", type=float, default=0.8,
+                    help="Tempo di correlazione della raffica [s] (DQ3).")
     return ap.parse_args()
 
 
@@ -95,16 +100,25 @@ def load_model(run_dir, which, algo):
     return ALGOS[algo].load(str(model_path))
 
 
-def make_norm_env(run_dir, xyz, rpy):
-    """Ambiente HoverAviaryTerminal con partenza (xyz, rpy) avvolto nel VecNormalize del training
-    (training=False: statistiche di normalizzazione congelate, lette da vecnormalize.pkl)."""
+def make_norm_env(run_dir, xyz, rpy, wind_mag=0.0, wind_tau=0.8, wind_seed=0):
+    """Ambiente di valutazione avvolto nel VecNormalize del training (statistiche congelate).
+    wind_mag=0 -> HoverAviaryTerminal (DQ1/DQ2, comportamento invariato).
+    wind_mag>0 -> HoverAviaryWind con vento stocastico non osservato dalla policy (DQ3).
+    Il vento è calcolato sullo stato fisico, quindi la penalità di shaping (ereditata da Shaped)
+    è irrilevante in valutazione: shaping_lambda resta al default 0."""
     stats = run_dir / "vecnormalize.pkl"
     if not stats.exists():
         raise SystemExit(f"[STOP] vecnormalize.pkl non trovato in {run_dir}")
     with contextlib.redirect_stdout(io.StringIO()):
-        venv = DummyVecEnv([lambda: HoverAviaryTerminal(
-            obs=ObservationType("kin"), act=ActionType("rpm"),
-            initial_xyzs=xyz, initial_rpys=rpy, gui=False)])
+        if wind_mag > 0.0:
+            venv = DummyVecEnv([lambda: HoverAviaryWind(
+                obs=ObservationType("kin"), act=ActionType("rpm"),
+                initial_xyzs=xyz, initial_rpys=rpy, gui=False,
+                wind_mag=wind_mag, wind_tau=wind_tau, wind_seed=wind_seed)])
+        else:
+            venv = DummyVecEnv([lambda: HoverAviaryTerminal(
+                obs=ObservationType("kin"), act=ActionType("rpm"),
+                initial_xyzs=xyz, initial_rpys=rpy, gui=False)])
         venv = VecNormalize.load(str(stats), venv)
     venv.training = False
     venv.norm_reward = False
@@ -140,11 +154,11 @@ def settle_time_of(dists, dist_final, ctrl_freq):
     return None
 
 
-def run_episode(model, run_dir, xyz, rpy, lin, ang, kick):
+def run_episode(model, run_dir, xyz, rpy, lin, ang, kick, wind_mag=0.0, wind_tau=0.8, wind_seed=0):
     """Gioca un episodio deterministico dalla partenza (xyz, rpy), con calcio (lin, ang) se kick=True.
     Lo stato è registrato PRIMA di ogni step, così l'ultimo campione è l'ultimo stato reale e non lo
     stato del reset automatico del VecEnv. Calcola le metriche sulla finestra finale di WINDOW_SEC."""
-    venv = make_norm_env(run_dir, xyz, rpy)
+    venv = make_norm_env(run_dir, xyz, rpy, wind_mag=wind_mag, wind_tau=wind_tau, wind_seed=wind_seed)
     obs = venv.reset()
     inner = venv.envs[0]   # ambiente interno: stato fisico reale, non normalizzato
 
@@ -220,7 +234,11 @@ def main():
 
     rows = []
     for i, (xyz, rpy, lin, ang) in enumerate(inits):
-        r = run_episode(model, run_dir, xyz, rpy, lin, ang, args.kick)
+        # wind_seed distinto per episodio (ma deterministico dato eval-seed): episodi con venti
+        # diversi, IDENTICI però tra modelli valutati con lo stesso eval-seed -> confronto A-vs-B equo.
+        r = run_episode(model, run_dir, xyz, rpy, lin, ang, args.kick,
+                        wind_mag=args.wind_mag, wind_tau=args.wind_tau,
+                        wind_seed=1000 * args.eval_seed + i)
         r["episode"] = i
         rows.append(r)
 
@@ -241,6 +259,7 @@ def main():
     summary = {
         "algo": algo, "model": args.model, "episodes": n,
         "eval_seed": args.eval_seed, "severity": args.severity, "kick": args.kick,
+        "wind_mag": args.wind_mag, "wind_tau": args.wind_tau,
         "crash_rate_pct": round(100.0 * n_crash / n, 2),
         "spin_rate_pct": round(100.0 * n_spin / n, 2),
         "stable_rate_pct": round(100.0 * n_stable / n, 2),

@@ -65,9 +65,11 @@ drone-rl/
 ├── src/
 │   ├── envs/
 │   │   ├── hover_terminal.py     # ambiente di hovering in cui lo schianto termina l'episodio
-│   │   └── hover_shaped.py       # ambiente di hovering con penalità che premia comandi regolari
+│   │   ├── hover_shaped.py       # ambiente di hovering con penalità che premia comandi regolari
+│   │   └── hover_wind.py         # ambiente di hovering con vento orizzontale stocastico (Ornstein-Uhlenbeck)
 │   ├── train.py                  # addestra una singola policy (un algoritmo, un seed)
-│   └── evaluate.py               # valuta una policy: robustezza (DQ1) e qualità del volo (DQ2)
+│   ├── evaluate.py               # valuta una policy: robustezza (DQ1/DQ3) e qualità del volo (DQ2)
+│   └── visualize.py              # registra una clip MP4 del volo di una policy
 ├── scripts/
 │   ├── run_dq1.sh                # addestra i 6 modelli della Domanda 1
 │   ├── run_eval_dq1.sh           # valuta i modelli della Domanda 1 a condizioni nominali
@@ -75,13 +77,18 @@ drone-rl/
 │   ├── aggregate_eval.py         # riunisce i risultati della Domanda 1 in un unico CSV
 │   ├── run_dq2.sh                # addestra i 9 modelli della Domanda 2
 │   ├── run_eval_dq2.sh           # valuta i modelli della Domanda 2
-│   └── aggregate_dq2.py          # riunisce i risultati della Domanda 2 in un unico CSV
+│   ├── aggregate_dq2.py          # riunisce i risultati della Domanda 2 in un unico CSV
+│   ├── run_dq3_policyB.sh        # addestra le 3 policy con vento della Domanda 3 (Policy B)
+│   ├── run_eval_dq3.sh           # valuta Policy A e B su 5 intensità di vento
+│   └── aggregate_dq3.py          # riunisce i risultati della Domanda 3 in un unico CSV
 ├── experiments/
 │   ├── dq1/                      # modelli e risultati della Domanda 1
-│   └── dq2/                      # modelli e risultati della Domanda 2
+│   ├── dq2/                      # modelli e risultati della Domanda 2
+│   └── dq3/                      # modelli e risultati della Domanda 3 (Policy B)
 ├── notebooks/
 │   ├── dq1_confronto_ppo_sac.ipynb    # analisi e figure della Domanda 1
-│   └── dq2_reward_shaping.ipynb       # analisi e figure della Domanda 2
+│   ├── dq2_reward_shaping.ipynb       # analisi e figure della Domanda 2
+│   └── dq3_robustezza_vento.ipynb     # analisi e figure della Domanda 3
 ├── results/
 │   ├── figures/                  # figure finali (.png)
 │   ├── tables/                   # tabelle finali (.csv)
@@ -200,6 +207,55 @@ L'effetto della penalità non è monotòno. Senza penalità o con penalità liev
 La risposta alla domanda riformula la sua premessa. La penalità non si paga principalmente in tempo per raggiungere il target — che non mostra una dipendenza chiara da `λ` — ma in **precisione** e nel **rischio di un comportamento di avvitamento**. Mantenere l'hover richiede continue micro-correzioni della potenza dei motori; la penalità le rende costose, e oltre una certa intensità alcuni addestramenti trovano un regime di rotazione che le evita, un minimo non desiderato della ricompensa modificata. Il fenomeno è analogo all'instabilità prodotta da un tasso di apprendimento troppo elevato: oltre una soglia, l'azione che dovrebbe stabilizzare introduce essa stessa instabilità. Con tre semi per `λ` il comportamento è documentato come fenomeno qualitativo dipendente dal seme, non quantificato come frequenza statistica precisa.
 
 Le clip in `results/videos/` mostrano i comportamenti osservati, tutti a partire dalla stessa condizione iniziale (la pallina rossa segna il target [0,0,1]): hover stabile e vicino al target a penalità lieve (`dq2_hover_sac_lam0.1_seed0_sev1.mp4`), hover preciso ma meno liscio a penalità media (`dq2_hover_preciso_sac_lam0.5_seed1_sev1.mp4`), hover "pigro" a penalità forte (`dq2_hover_sac_lam0.8_seed1_sev1.mp4`) e il regime di avvitamento in cui il drone ruota su sé stesso senza stabilizzarsi (`dq2_avvitamento_sac_lam0.5_seed3_sev1.mp4`, `dq2_avvitamento_sac_lam0.8_seed0_sev1.mp4`).
+
+## Domanda 3 — Robustezza al vento e Domain Randomization
+
+### Impostazione
+
+La terza domanda verifica se il modello ottimizzato per la fluidità (SAC con reward shaping `λ=0.1`, vincitore della Domanda 2) resista a turbolenze esterne introdotte solo in valutazione, oppure se sia necessario iniettare disturbi durante l'addestramento. Il confronto oppone due policy che differiscono per una sola variabile — la presenza di vento in training:
+
+- **Policy A** — SAC con reward shaping `λ=0.1` addestrata in aria calma; è la vincitrice della Domanda 2, riusata senza riaddestramento.
+- **Policy B** — la stessa configurazione (SAC, `λ=0.1`, stesso budget e stessi semi) addestrata con vento stocastico iniettato a ogni episodio (*domain randomization*).
+
+Il vento è modellato come una forza orizzontale applicata al baricentro del drone, con intensità e direzione che variano nel tempo secondo due processi di Ornstein-Uhlenbeck indipendenti sulle componenti orizzontali. Il modello stocastico correlato nel tempo riproduce raffiche che crescono e calano, più realistiche di un vento costante (che produrrebbe un semplice offset) o di un rumore per-passo (troppo brusco). L'intensità è espressa dal parametro `wind_mag`, la deviazione standard della forza in frazione del peso del drone. La penalità è realizzata dalla variante `HoverAviaryWind` (in `src/envs/`), che estende l'ambiente con reward shaping della Domanda 2: la Policy B mantiene così la stessa ricompensa della Domanda 2 e aggiunge solo il vento.
+
+Il vento non è osservato dalla policy, che percepisce solo lo stato del proprio corpo e ne reagisce agli effetti: la robustezza è quindi reattiva, coerente con un drone privo di un sensore di vento dedicato. La forza è applicata in coordinate mondo al baricentro, così da produrre una spinta orizzontale netta senza coppie spurie: per mantenere la posizione il drone deve inclinarsi, che è esattamente la dinamica di controllo d'assetto oggetto della domanda.
+
+La Policy B è addestrata a `wind_mag=0.08`, intensità scelta nella zona di transizione in cui la Policy A comincia a cedere: forte abbastanza da richiedere una strategia di compensazione, non tanto da impedire l'apprendimento dell'hover. Entrambe le policy sono valutate su cinque intensità crescenti, `wind_mag ∈ {0.02, 0.05, 0.08, 0.12, 0.15}`, con condizioni iniziali e sequenze di vento identiche per costruzione (stesso seme). I livelli oltre 0.08 sono *out-of-distribution* per la Policy B, e misurano la sua capacità di generalizzare a venti mai visti in addestramento.
+
+### Riproduzione
+
+Dalla radice del progetto, con l'ambiente attivo:
+
+```bash
+conda activate drone-rl
+
+# 1. Addestramento delle 3 policy con vento (Policy B, seed 0/1/2; ~33 min/run su MacBook Air M5)
+caffeinate -i bash scripts/run_dq3_policyB.sh
+
+# 2. Valutazione di robustezza: Policy A e Policy B su 5 intensità di vento (30 valutazioni)
+caffeinate -i bash scripts/run_eval_dq3.sh
+
+# 3. Aggregazione dei riepiloghi in un unico CSV
+python scripts/aggregate_dq3.py
+
+# 4. Esecuzione del notebook di analisi: rigenera ed esporta figure e tabelle in results/
+jupyter nbconvert --to notebook --execute --inplace notebooks/dq3_robustezza_vento.ipynb
+```
+
+La Policy A non viene riaddestrata: sono i modelli `sac_lam0.1_seed{0,1,2}` della Domanda 2. Le figure e le tabelle finali sono già incluse in `results/`. Per rigenerare solo le figure è sufficiente il passo 4, che legge il file già versionato (`results/tables/dq3_robustness.csv`).
+
+### Risultati
+
+![Crash Rate in funzione dell'intensità del vento](results/figures/dq3_crashrate_vs_wind.png)
+
+![Ritorno in funzione dell'intensità del vento](results/figures/dq3_return_vs_wind.png)
+
+La robustezza zero-shot del modello fluido non è sufficiente. La Policy A, addestrata in aria calma, perde l'assetto in modo sistematico già a vento moderato (Crash Rate circa 52% a `wind_mag=0.08`) e collassa a vento forte (circa 98% a 0.15). Iniettare il vento in addestramento rende invece la policy robusta: la Policy B azzera il Crash Rate fino al proprio vento di training (0% fino a 0.08) e lo mantiene basso a intensità superiori mai viste (circa 6% e 28% a 0.12 e 0.15, contro circa 92% e 98% della Policy A). La robustezza si conferma su un secondo asse indipendente dal Crash Rate: a parità di vento la Policy B mantiene ritorni di valutazione nettamente più alti (a 0.12 circa 463 contro 192), cioè non solo schianta meno, ma vola meglio quando sopravvive.
+
+La risposta alla domanda è netta: la sola ottimizzazione per la fluidità non conferisce robustezza al vento; il domain randomization in addestramento è necessario e sufficiente a ottenerla, con generalizzazione a venti più intensi di quello visto in training. Ciò che la policy apprende è la reazione al disturbo, non un vento specifico, e per questo generalizza. Resta un limite dichiarato: fuori distribuzione riaffiora l'avvitamento già osservato nella Domanda 2, con uno Spin Rate della Policy B che risale a circa 26% a `wind_mag=0.15`; la Policy B è molto più robusta ma non invincibile oltre il vento di training.
+
+Due clip in `results/videos/` mostrano lo stesso vento (`wind_mag=0.12`, out-of-distribution per la Policy B) a partire dalla stessa condizione iniziale, con la pallina rossa a segnare il target: la Policy A che tenta di correggere, inizia a ruotare e perde l'assetto (`dq3_A_nowind_train_wind0.12_seed0.mp4`), e la Policy B che assorbe le raffiche e mantiene l'hovering per l'intero episodio (`dq3_B_windtrain_wind0.12_seed0.mp4`).
 
 
 

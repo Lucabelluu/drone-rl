@@ -27,6 +27,7 @@ from gym_pybullet_drones.utils.enums import ObservationType, ActionType
 
 from envs.hover_terminal import HoverAviaryTerminal
 from envs.hover_shaped import HoverAviaryShaped
+from envs.hover_wind import HoverAviaryWind
 
 # Punti voluti sulla curva di apprendimento, a prescindere dal budget.
 N_EVAL_POINTS = 50
@@ -54,6 +55,10 @@ def parse_args():
                    help="Usa HoverAviaryShaped (reward − lambda*||a_t − a_{t-1}||^2).")
     p.add_argument("--lambda", dest="shaping_lambda", type=float, default=0.0,
                    help="Peso lambda della penalità di shaping (usato solo con --shaped).")
+    p.add_argument("--wind-mag", type=float, default=0.0,
+                   help="Vento in training (frazione del peso). >0 → domain randomization (DQ3).")
+    p.add_argument("--wind-tau", type=float, default=0.8,
+                   help="Tempo di correlazione della raffica in training [s] (DQ3).")
     return p.parse_args()
 
 
@@ -92,7 +97,9 @@ def main():
 
     # 2) Cartella del run, nome deterministico. Per i run shaped (DQ2) il lambda entra nel nome,
     #    cosi' condizioni con lambda diverso non collidono e il path e' auto-descrittivo.
-    if args.shaped:
+    if args.wind_mag > 0.0:
+        run_name = f"{args.algo}_lam{args.shaping_lambda}_wind{args.wind_mag}_seed{args.seed}"
+    elif args.shaped:
         run_name = f"{args.algo}_lam{args.shaping_lambda}_seed{args.seed}"
     else:
         run_name = f"{args.algo}_seed{args.seed}"
@@ -107,9 +114,10 @@ def main():
         "seed": args.seed,
         "timesteps": args.timesteps,
         "obs": "kin",
-        "act": "rpm",
         "shaped": args.shaped,
         "shaping_lambda": args.shaping_lambda,
+        "wind_mag": args.wind_mag,
+        "wind_tau": args.wind_tau,
         "sb3_version": stable_baselines3.__version__,
         "git_commit": get_git_commit(),
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -128,9 +136,19 @@ def main():
     # nativo (vedi sotto), così la curva di controllo riflette l'obiettivo vero ed è confrontabile
     # tra i diversi lambda.
     train_kwargs = dict(env_kwargs)
-    if args.shaped:
+    if args.wind_mag > 0.0:
+        # Policy B (DQ3): vento in training = domain randomization. HoverAviaryWind eredita da
+        # HoverAviaryShaped, quindi porta con sé anche la penalità di shaping (stessa reward della DQ2).
         train_kwargs["shaping_lambda"] = args.shaping_lambda
-    train_cls = HoverAviaryShaped if args.shaped else HoverAviaryTerminal
+        train_kwargs["wind_mag"] = args.wind_mag
+        train_kwargs["wind_tau"] = args.wind_tau
+        train_kwargs["wind_seed"] = args.seed
+        train_cls = HoverAviaryWind
+    elif args.shaped:
+        train_kwargs["shaping_lambda"] = args.shaping_lambda
+        train_cls = HoverAviaryShaped
+    else:
+        train_cls = HoverAviaryTerminal
     train_env = make_vec_env(train_cls, env_kwargs=train_kwargs, n_envs=1, seed=args.seed)
     # norm_reward=False: tengo il reward grezzo (0-2) per ritorni interpretabili e comparabili (~480 max)
     train_env = VecNormalize(train_env, norm_obs=True, norm_reward=False)
