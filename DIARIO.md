@@ -1033,3 +1033,24 @@ Verdetto DQ3: la robustezza zero-shot del modello fluido NON basta (Policy A ~52
 a 0.15); il domain randomization in training è necessario e sufficiente (Policy B 0% fino a 0.08, ~6%
 e ~28% a 0.12 e 0.15), con generalizzazione out-of-distribution e un residuo di avvitamento (~26% spin
 a 0.15) come unico limite fuori distribuzione.
+
+## 08-07-2026 — Preparazione della presentazione
+
+Chiusa la parte sperimentale, ho costruito la presentazione d'esame (slide + note
+del relatore per il video). Scelte principali:
+
+- Struttura allineata alle indicazioni del docente: metodologia generale prima,
+  poi le tre domande applicate, ciascuna con "cosa ho applicato → risultati →
+  risposta esplicita". Ordine imposto in sede di mentoring.
+- Sezione "Ambiente" al posto di "Dataset" (il progetto usa un ambiente RL, non
+  un dataset), come da linee guida.
+- Filo conduttore reso esplicito: SAC → SAC+shaping(λ=0.1) → SAC+shaping+vento.
+  I riquadri iniziali mostrano le tre fasi senza anticipare i vincitori; le
+  conclusioni chiudono il cerchio mostrando le configurazioni vincenti.
+- DQ2 presentata nella sequenza concordata col docente: prima "il tempo non è il
+  costo", poi "il costo è precisione + spin". Accenno a voce ai run falliti
+  riaddestrati con seed sostitutivi.
+- Limiti dichiarati in chiusura (confronto a famiglie, spin non quantificato come
+  frequenza, spin residuo ~26% a wind_mag=0.15 fuori distribuzione).
+
+Materiali di consegna: repository pubblica, presentazione (.pptx + .mp4), diario.
