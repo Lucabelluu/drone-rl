@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run_dq2.sh — Batch di addestramento DQ2 (reward shaping su SAC).
-# Addestra le condizioni shaped lambda in {0.01, 0.1, 0.5}, seed in {0,1,2}: 9 run da 500k.
+# Addestra le condizioni shaped lambda in {0.1, 0.5, 0.8}, seed in {0,1,2}: 9 run da 500k.
 # La baseline lambda=0 NON e' qui: e' la SAC della DQ1 (gia' addestrata), riusata come termine
 # di confronto. Ogni run scrive in experiments/dq2/results/sac_lam{lambda}_seed{seed}/.
 # Lancio:  caffeinate -i bash scripts/run_dq2.sh
